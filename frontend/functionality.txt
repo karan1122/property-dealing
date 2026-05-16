@@ -1,0 +1,36 @@
+property seller(user):
+login
+registration
+add personal details
+add it's property details for sale(location, price, property for sell or rent etc)
+system will assign broker(agent of company)
+payment for add his/her property for sale per property(1000 Rs e.g)
+receive announcement.
+give feedback
+
+
+
+agents
+login
+manage it's personal details
+view all assigned customers
+receive announcement
+update status of property timeline like(Is sold, In progress, Is confirm to deal, Deal successfully)
+View Points or ranking(based on how many deals he/she completed successfully)
+Give Feedback
+
+
+admin
+login
+register & manage agents
+assign customer to agents
+view status of property
+view all propertly listed
+view sales & Deals
+create announcement for agents & customers
+manage feedback
+generate report
+
+
+
+
