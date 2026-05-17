@@ -7,6 +7,8 @@ const connectDB = require("./config/db");
 const authRoutes = require("./routes/authRoutes");
 const listingRoutes = require("./routes/listingRoutes");
 const propertyRoutes = require("./routes/propertyRoutes");
+const adminRoutes = require("./routes/adminRoutes");
+const path = require("path");
 
 const app = express();
 
@@ -30,6 +32,9 @@ app.use(cookieParser());
 app.use("/api/auth",     authRoutes);
 app.use("/api/listings", listingRoutes);
 app.use("/api/properties", propertyRoutes);
+//admin
+app.use("/api/admin", adminRoutes);
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get("/api/health", (req, res) =>

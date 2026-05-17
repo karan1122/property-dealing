@@ -86,7 +86,7 @@ const Login = () => {
             "admin"
           ) {
             navigate(
-              "/admin/dashboard"
+              "/dashboard"
             );
           } else if (
             res.data.user.role ===

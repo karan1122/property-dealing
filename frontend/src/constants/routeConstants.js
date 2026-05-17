@@ -15,3 +15,4 @@ export const USER_ROUTE = {
   CONTACT_US: "/contact",
   PROFILE: "/profile",
 };
+

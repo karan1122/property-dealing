@@ -39,7 +39,11 @@ const userSchema = new mongoose.Schema(
       enum: ["buyer", "seller", "agent", "admin"],
       default: "buyer",
     },
-
+    assignedAgent: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
     refreshTokens: {
       type: [String],
       default: [],

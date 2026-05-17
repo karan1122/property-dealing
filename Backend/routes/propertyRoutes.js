@@ -4,10 +4,15 @@ const multer = require("multer");
 const path = require("path");
 const { protect: authMiddleware, authorizeRoles: roleGuard } = require("../middleware/authMiddleware");
 const ctrl = require("../controllers/propertyController");
+const fs   = require("fs");
+
+// ── Absolute path — always correct regardless of cwd ─────────────────────────
+const uploadDir = path.join(__dirname, "../uploads");
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, "uploads/"),
-  filename: (req, file, cb) => cb(null, Date.now() + path.extname(file.originalname)),
+  destination: (req, file, cb) => cb(null, uploadDir),  // ← absolute path
+  filename:    (req, file, cb) => cb(null, Date.now() + path.extname(file.originalname)),
 });
 const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } });
 
@@ -41,6 +46,7 @@ router.put(
   "/:id",
   authMiddleware,
   roleGuard("seller"),
+  imgFields,              // ← add this
   ctrl.updateProperty
 );
 

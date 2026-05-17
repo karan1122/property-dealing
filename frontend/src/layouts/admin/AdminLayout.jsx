@@ -1,869 +1,986 @@
-import React, { useEffect } from "react";
-import { dashboardJs } from "./layoutScript";
-import { Outlet } from "react-router-dom";
-const AdminLayout = () => {
-  useEffect(() => {
-    dashboardJs;
-  }, []);
+import { useState, useEffect, useContext, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import { AuthContext } from "../../context/AuthContext";
+import API from "../../api/axios";
+
+
+/* ═══════════════════════════════════════════════════════════════
+   HELPERS
+═══════════════════════════════════════════════════════════════ */
+const fmtPrice = (n) =>
+  new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n ?? 0);
+
+const fmtDate = (d) =>
+  d ? new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—";
+
+/* ═══════════════════════════════════════════════════════════════
+   SVG ICON LIBRARY
+═══════════════════════════════════════════════════════════════ */
+const IC = {
+  Grid:      () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>,
+  Building:  () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="9" y1="22" x2="9" y2="2"/><line x1="15" y1="22" x2="15" y2="2"/><line x1="4" y1="7" x2="9" y2="7"/><line x1="4" y1="12" x2="9" y2="12"/><line x1="4" y1="17" x2="9" y2="17"/><line x1="15" y1="7" x2="20" y2="7"/><line x1="15" y1="12" x2="20" y2="12"/><line x1="15" y1="17" x2="20" y2="17"/></svg>,
+  Users:     () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>,
+  Agent:     () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/><path d="M12 11v4"/><path d="M10 15h4"/></svg>,
+  DollarSign:() => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>,
+  Home:      () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,
+  LogOut:    () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>,
+  Check:     () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>,
+  X:         () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
+  Trash:     () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>,
+  Edit:      () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
+  Link:      () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>,
+  Unlink:    () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/><line x1="2" y1="2" x2="22" y2="22"/></svg>,
+  Clock:     () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
+  Star:      () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>,
+  Bell:      () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>,
+  TrendUp:   () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>,
+  Shield:    () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>,
+  Briefcase: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>,
+  AlertCircle:() => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
+  Search:    () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>,
+  CreditCard:() => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>,
+  UserCheck: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><polyline points="17 11 19 13 23 9"/></svg>,
+};
+
+/* ═══════════════════════════════════════════════════════════════
+   REUSABLE PILLS
+═══════════════════════════════════════════════════════════════ */
+const RolePill = ({ role }) => {
+  const map = {
+    admin:  { bg: "#0d1117", color: "#fff" },
+    seller: { bg: "#fef3c7", color: "#92400e" },
+    buyer:  { bg: "#dbeafe", color: "#1e40af" },
+    agent:  { bg: "#d1fae5", color: "#065f46" },
+  };
+  const s = map[role] || map.buyer;
   return (
-    <div className="relative bg-[#f7f6f9] h-full min-h-screen">
-      <div className="flex items-start">
-        <nav id="sidebar" className="lg:min-w-[250px] w-max max-lg:min-w-8">
-          <div
-            id="sidebar-collapse-menu"
-            className="bg-white shadow-lg h-screen fixed top-0 left-0 overflow-auto z-[99] lg:min-w-[250px] lg:w-max max-lg:w-0 max-lg:invisible transition-all duration-500"
-          >
-            <div className="flex items-center gap-2 pt-6 pb-2 px-4 sticky top-0 bg-white min-h-[64px] z-[100]">
-              <a href="javascript:void(0)" className="text-xl font-extrabold">
-                Crestovia
-              </a>
-              <button id="close-sidebar" className="lg:hidden ml-auto">
-                <svg
-                  className="w-7 h-7"
-                  fill="#000"
-                  viewBox="0 0 20 20"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-              </button>
-            </div>
-            <div className="py-4 px-4">
-              <ul className="space-y-2">
-                <li>
-                  <a
-                    href="javascript:void(0)"
-                    className="text-slate-800 text-[15px] font-medium flex items-center cursor-pointer hover:bg-gray-100 rounded-md px-3 py-2.5 transition-all duration-300"
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="currentColor"
-                      className="w-4.5 h-4.5 mr-3"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        d="M19.56 23.253H4.44a4.051 4.051 0 0 1-4.05-4.05v-9.115c0-1.317.648-2.56 1.728-3.315l7.56-5.292a4.062 4.062 0 0 1 4.644 0l7.56 5.292a4.056 4.056 0 0 1 1.728 3.315v9.115a4.051 4.051 0 0 1-4.05 4.05zM12 2.366a2.45 2.45 0 0 0-1.393.443l-7.56 5.292a2.433 2.433 0 0 0-1.037 1.987v9.115c0 1.34 1.09 2.43 2.43 2.43h15.12c1.34 0 2.43-1.09 2.43-2.43v-9.115c0-.788-.389-1.533-1.037-1.987l-7.56-5.292A2.438 2.438 0 0 0 12 2.377z"
-                        data-original="#000000"
-                      />
-                      <path
-                        d="M16.32 23.253H7.68a.816.816 0 0 1-.81-.81v-5.4c0-2.83 2.3-5.13 5.13-5.13s5.13 2.3 5.13 5.13v5.4c0 .443-.367.81-.81.81zm-7.83-1.62h7.02v-4.59c0-1.933-1.577-3.51-3.51-3.51s-3.51 1.577-3.51 3.51z"
-                        data-original="#000000"
-                      />
-                    </svg>
-                    <span className="overflow-hidden text-ellipsis whitespace-nowrap">
-                      Dashboard
-                    </span>
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="arrowIcon w-3 fill-current -rotate-90 ml-auto transition-all duration-500"
-                      viewBox="0 0 451.847 451.847"
-                    >
-                      <path
-                        d="M225.923 354.706c-8.098 0-16.195-3.092-22.369-9.263L9.27 151.157c-12.359-12.359-12.359-32.397 0-44.751 12.354-12.354 32.388-12.354 44.748 0l171.905 171.915 171.906-171.909c12.359-12.354 32.391-12.354 44.744 0 12.365 12.354 12.365 32.392 0 44.751L248.292 345.449c-6.177 6.172-14.274 9.257-22.369 9.257z"
-                        data-original="#000000"
-                      />
-                    </svg>
-                  </a>
-                  <ul className="sub menu max-h-0 overflow-hidden transition-[max-height] duration-500 ease-in-out ml-8">
-                    <li>
-                      <a
-                        href="javascript:void(0)"
-                        className="text-slate-800 text-[15px] font-medium block cursor-pointer hover:bg-gray-100 rounded-md px-3 py-2 transition-all duration-300"
-                      >
-                        <span>Analytics</span>
-                      </a>
-                    </li>
-                    <li>
-                      <a
-                        href="javascript:void(0)"
-                        className="text-slate-800 text-[15px] font-medium block cursor-pointer hover:bg-gray-100 rounded-md px-3 py-2 transition-all duration-300"
-                      >
-                        <span>Logistics</span>
-                      </a>
-                    </li>
-                    <li>
-                      <a
-                        href="javascript:void(0)"
-                        className="text-slate-800 text-[15px] font-medium block cursor-pointer hover:bg-gray-100 rounded-md px-3 py-2 transition-all duration-300"
-                      >
-                        <span>Academy</span>
-                      </a>
-                    </li>
-                  </ul>
-                </li>
-                <li>
-                  <a
-                    href="javascript:void(0)"
-                    className="text-slate-800 text-[15px] font-medium flex items-center cursor-pointer hover:bg-gray-100 rounded-md px-3 py-2.5 transition-all duration-300"
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="currentColor"
-                      className="w-4.5 h-4.5 mr-3"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        d="M18 2c2.206 0 4 1.794 4 4v12c0 2.206-1.794 4-4 4H6c-2.206 0-4-1.794-4-4V6c0-2.206 1.794-4 4-4zm0-2H6a6 6 0 0 0-6 6v12a6 6 0 0 0 6 6h12a6 6 0 0 0 6-6V6a6 6 0 0 0-6-6z"
-                        data-original="#000000"
-                      />
-                      <path
-                        d="M12 18a1 1 0 0 1-1-1V7a1 1 0 0 1 2 0v10a1 1 0 0 1-1 1z"
-                        data-original="#000000"
-                      />
-                      <path
-                        d="M6 12a1 1 0 0 1 1-1h10a1 1 0 0 1 0 2H7a1 1 0 0 1-1-1z"
-                        data-original="#000000"
-                      />
-                    </svg>
-                    <span className="overflow-hidden text-ellipsis whitespace-nowrap">
-                      Posts
-                    </span>
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="arrowIcon w-3 fill-current -rotate-90 ml-auto transition-all duration-500"
-                      viewBox="0 0 451.847 451.847"
-                    >
-                      <path
-                        d="M225.923 354.706c-8.098 0-16.195-3.092-22.369-9.263L9.27 151.157c-12.359-12.359-12.359-32.397 0-44.751 12.354-12.354 32.388-12.354 44.748 0l171.905 171.915 171.906-171.909c12.359-12.354 32.391-12.354 44.744 0 12.365 12.354 12.365 32.392 0 44.751L248.292 345.449c-6.177 6.172-14.274 9.257-22.369 9.257z"
-                        data-original="#000000"
-                      />
-                    </svg>
-                  </a>
-                  <ul className="sub menu max-h-0 overflow-hidden transition-[max-height] duration-500 ease-in-out ml-8">
-                    <li>
-                      <a
-                        href="javascript:void(0)"
-                        className="text-slate-800 text-[15px] font-medium block cursor-pointer hover:bg-gray-100 rounded-md px-3 py-2 transition-all duration-300"
-                      >
-                        <span>Help center</span>
-                      </a>
-                    </li>
-                    <li>
-                      <a
-                        href="javascript:void(0)"
-                        className="text-slate-800 text-[15px] font-medium block cursor-pointer hover:bg-gray-100 rounded-md px-3 py-2 transition-all duration-300"
-                      >
-                        <span>Article</span>
-                      </a>
-                    </li>
-                    <li>
-                      <a
-                        href="javascript:void(0)"
-                        className="text-slate-800 text-[15px] font-medium block cursor-pointer hover:bg-gray-100 rounded-md px-3 py-2 transition-all duration-300"
-                      >
-                        <span>Education</span>
-                      </a>
-                    </li>
-                  </ul>
-                </li>
-                <li>
-                  <a
-                    href="javascript:void(0)"
-                    className="text-slate-800 text-[15px] font-medium flex items-center cursor-pointer hover:bg-gray-100 rounded-md px-3 py-2.5 transition-all duration-300"
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="currentColor"
-                      className="w-4.5 h-4.5 mr-3"
-                      viewBox="0 0 510 510"
-                    >
-                      <g fillOpacity=".9">
-                        <path
-                          d="M255 0C114.75 0 0 114.75 0 255s114.75 255 255 255 255-114.75 255-255S395.25 0 255 0zm0 459c-112.2 0-204-91.8-204-204S142.8 51 255 51s204 91.8 204 204-91.8 204-204 204z"
-                          data-original="#000000"
-                        />
-                        <path
-                          d="M267.75 127.5H229.5v153l132.6 81.6 20.4-33.15-114.75-68.85z"
-                          data-original="#000000"
-                        />
-                      </g>
-                    </svg>
-                    <span className="overflow-hidden text-ellipsis whitespace-nowrap">
-                      Schedules
-                    </span>
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="arrowIcon w-3 fill-current -rotate-90 ml-auto transition-all duration-500"
-                      viewBox="0 0 451.847 451.847"
-                    >
-                      <path
-                        d="M225.923 354.706c-8.098 0-16.195-3.092-22.369-9.263L9.27 151.157c-12.359-12.359-12.359-32.397 0-44.751 12.354-12.354 32.388-12.354 44.748 0l171.905 171.915 171.906-171.909c12.359-12.354 32.391-12.354 44.744 0 12.365 12.354 12.365 32.392 0 44.751L248.292 345.449c-6.177 6.172-14.274 9.257-22.369 9.257z"
-                        data-original="#000000"
-                      />
-                    </svg>
-                  </a>
-                  <ul className="sub menu max-h-0 overflow-hidden transition-[max-height] duration-500 ease-in-out ml-8">
-                    <li>
-                      <a
-                        href="javascript:void(0)"
-                        className="text-slate-800 text-[15px] font-medium block cursor-pointer hover:bg-gray-100 rounded-md px-3 py-2 transition-all duration-300"
-                      >
-                        <span>Date</span>
-                      </a>
-                    </li>
-                    <li>
-                      <a
-                        href="javascript:void(0)"
-                        className="text-slate-800 text-[15px] font-medium block cursor-pointer hover:bg-gray-100 rounded-md px-3 py-2 transition-all duration-300"
-                      >
-                        <span>Time</span>
-                      </a>
-                    </li>
-                  </ul>
-                </li>
-                <li>
-                  <a
-                    href="javascript:void(0)"
-                    className="text-slate-800 text-[15px] font-medium flex items-center cursor-pointer hover:bg-gray-100 rounded-md px-3 py-2.5 transition-all duration-300"
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="currentColor"
-                      className="w-4.5 h-4.5 mr-3"
-                      viewBox="0 0 512 512"
-                    >
-                      <path
-                        d="M437.02 74.98C388.668 26.63 324.379 0 256 0S123.332 26.629 74.98 74.98C26.63 123.332 0 187.621 0 256s26.629 132.668 74.98 181.02C123.332 485.37 187.621 512 256 512s132.668-26.629 181.02-74.98C485.37 388.668 512 324.379 512 256s-26.629-132.668-74.98-181.02zM111.105 429.297c8.454-72.735 70.989-128.89 144.895-128.89 38.96 0 75.598 15.179 103.156 42.734 23.281 23.285 37.965 53.687 41.742 86.152C361.641 462.172 311.094 482 256 482s-105.637-19.824-144.895-52.703zM256 269.507c-42.871 0-77.754-34.882-77.754-77.753C178.246 148.879 213.13 114 256 114s77.754 34.879 77.754 77.754c0 42.871-34.883 77.754-77.754 77.754zm170.719 134.427a175.9 175.9 0 0 0-46.352-82.004c-18.437-18.438-40.25-32.27-64.039-40.938 28.598-19.394 47.426-52.16 47.426-89.238C363.754 132.34 315.414 84 256 84s-107.754 48.34-107.754 107.754c0 37.098 18.844 69.875 47.465 89.266-21.887 7.976-42.14 20.308-59.566 36.542-25.235 23.5-42.758 53.465-50.883 86.348C50.852 364.242 30 312.512 30 256 30 131.383 131.383 30 256 30s226 101.383 226 226c0 56.523-20.86 108.266-55.281 147.934zm0 0"
-                        data-original="#000000"
-                      />
-                    </svg>
-                    <span className="overflow-hidden text-ellipsis whitespace-nowrap">
-                      Audience
-                    </span>
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="arrowIcon w-3 fill-current -rotate-90 ml-auto transition-all duration-500"
-                      viewBox="0 0 451.847 451.847"
-                    >
-                      <path
-                        d="M225.923 354.706c-8.098 0-16.195-3.092-22.369-9.263L9.27 151.157c-12.359-12.359-12.359-32.397 0-44.751 12.354-12.354 32.388-12.354 44.748 0l171.905 171.915 171.906-171.909c12.359-12.354 32.391-12.354 44.744 0 12.365 12.354 12.365 32.392 0 44.751L248.292 345.449c-6.177 6.172-14.274 9.257-22.369 9.257z"
-                        data-original="#000000"
-                      />
-                    </svg>
-                  </a>
-                  <ul className="sub menu max-h-0 overflow-hidden transition-[max-height] duration-500 ease-in-out ml-8">
-                    <li>
-                      <a
-                        href="javascript:void(0)"
-                        className="text-slate-800 text-[15px] font-medium block cursor-pointer hover:bg-gray-100 rounded-md px-3 py-2 transition-all duration-300"
-                      >
-                        <span>Users</span>
-                      </a>
-                    </li>
-                    <li>
-                      <a
-                        href="javascript:void(0)"
-                        className="text-slate-800 text-[15px] font-medium block cursor-pointer hover:bg-gray-100 rounded-md px-3 py-2 transition-all duration-300"
-                      >
-                        <span>Leads</span>
-                      </a>
-                    </li>
-                    <li>
-                      <a
-                        href="javascript:void(0)"
-                        className="text-slate-800 text-[15px] font-medium block cursor-pointer hover:bg-gray-100 rounded-md px-3 py-2 transition-all duration-300"
-                      >
-                        <span>Visitors</span>
-                      </a>
-                    </li>
-                  </ul>
-                </li>
-                <li>
-                  <a
-                    href="javascript:void(0)"
-                    className="text-slate-800 text-[15px] font-medium flex items-center cursor-pointer hover:bg-gray-100 rounded-md px-3 py-2.5 transition-all duration-300"
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="currentColor"
-                      className="w-4.5 h-4.5 mr-3"
-                      viewBox="0 0 25 25"
-                    >
-                      <g data-name="Action Expand">
-                        <path
-                          d="M21.5 1.25h-18A2.25 2.25 0 0 0 1.25 3.5v18a2.25 2.25 0 0 0 2.25 2.25h18a2.25 2.25 0 0 0 2.25-2.25v-18a2.25 2.25 0 0 0-2.25-2.25zm.75 20.25a.75.75 0 0 1-.75.75h-18a.75.75 0 0 1-.75-.75v-18a.75.75 0 0 1 .75-.75h18a.75.75 0 0 1 .75.75z"
-                          data-original="#000000"
-                        />
-                        <path
-                          d="M11.75 7.25h1.5v10.5h-1.5z"
-                          data-original="#000000"
-                        />
-                        <path
-                          d="M7.25 11.75h10.5v1.5H7.25z"
-                          data-original="#000000"
-                        />
-                      </g>
-                    </svg>
-                    <span className="overflow-hidden text-ellipsis whitespace-nowrap">
-                      Actions
-                    </span>
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="arrowIcon w-3 fill-current -rotate-90 ml-auto transition-all duration-500"
-                      viewBox="0 0 451.847 451.847"
-                    >
-                      <path
-                        d="M225.923 354.706c-8.098 0-16.195-3.092-22.369-9.263L9.27 151.157c-12.359-12.359-12.359-32.397 0-44.751 12.354-12.354 32.388-12.354 44.748 0l171.905 171.915 171.906-171.909c12.359-12.354 32.391-12.354 44.744 0 12.365 12.354 12.365 32.392 0 44.751L248.292 345.449c-6.177 6.172-14.274 9.257-22.369 9.257z"
-                        data-original="#000000"
-                      />
-                    </svg>
-                  </a>
-                  <ul className="sub menu max-h-0 overflow-hidden transition-[max-height] duration-500 ease-in-out ml-8">
-                    <li>
-                      <a
-                        href="javascript:void(0)"
-                        className="text-slate-800 text-[15px] font-medium block cursor-pointer hover:bg-gray-100 rounded-md px-3 py-2 transition-all duration-300"
-                      >
-                        <span>Profile</span>
-                      </a>
-                    </li>
-                    <li>
-                      <a
-                        href="javascript:void(0)"
-                        className="text-slate-800 text-[15px] font-medium block cursor-pointer hover:bg-gray-100 rounded-md px-3 py-2 transition-all duration-300"
-                      >
-                        <span>Logout</span>
-                      </a>
-                    </li>
-                  </ul>
-                </li>
-              </ul>
-              <div className="mt-6">
-                <h6 className="text-blue-600 text-sm font-bold px-3">
-                  General Settings
-                </h6>
-                <ul className="mt-3 space-y-2">
-                  <li>
-                    <a
-                      href="javascript:void(0)"
-                      className="text-slate-800 text-[15px] font-medium flex items-center cursor-pointer hover:bg-gray-100 rounded-md px-3 py-2.5 transition-all duration-300"
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="currentColor"
-                        className="w-4.5 h-4.5 mr-3"
-                        viewBox="0 0 214.27 214.27"
-                      >
-                        <path
-                          d="M196.926 55.171c-.11-5.785-.215-11.25-.215-16.537a7.5 7.5 0 0 0-7.5-7.5c-32.075 0-56.496-9.218-76.852-29.01a7.498 7.498 0 0 0-10.457 0c-20.354 19.792-44.771 29.01-76.844 29.01a7.5 7.5 0 0 0-7.5 7.5c0 5.288-.104 10.755-.215 16.541-1.028 53.836-2.436 127.567 87.331 158.682a7.495 7.495 0 0 0 4.912 0c89.774-31.116 88.368-104.849 87.34-158.686zm-89.795 143.641c-76.987-27.967-75.823-89.232-74.79-143.351.062-3.248.122-6.396.164-9.482 30.04-1.268 54.062-10.371 74.626-28.285 20.566 17.914 44.592 27.018 74.634 28.285.042 3.085.102 6.231.164 9.477 1.032 54.121 2.195 115.388-74.798 143.356z"
-                          data-original="#000000"
-                        />
-                        <path
-                          d="m132.958 81.082-36.199 36.197-15.447-15.447a7.501 7.501 0 0 0-10.606 10.607l20.75 20.75a7.477 7.477 0 0 0 5.303 2.196 7.477 7.477 0 0 0 5.303-2.196l41.501-41.5a7.498 7.498 0 0 0 .001-10.606 7.5 7.5 0 0 0-10.606-.001z"
-                          data-original="#000000"
-                        />
-                      </svg>
-                      <span>Security</span>
-                    </a>
-                  </li>
-                  <li>
-                    <a
-                      href="javascript:void(0)"
-                      className="text-slate-800 text-[15px] font-medium flex items-center cursor-pointer hover:bg-gray-100 rounded-md px-3 py-2.5 transition-all duration-300"
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="currentColor"
-                        className="w-4.5 h-4.5 mr-3"
-                        viewBox="0 0 64 64"
-                      >
-                        <path
-                          d="M61.4 29.9h-6.542a9.377 9.377 0 0 0-18.28 0H2.6a2.1 2.1 0 0 0 0 4.2h33.978a9.377 9.377 0 0 0 18.28 0H61.4a2.1 2.1 0 0 0 0-4.2Zm-15.687 7.287A5.187 5.187 0 1 1 50.9 32a5.187 5.187 0 0 1-5.187 5.187ZM2.6 13.1h5.691a9.377 9.377 0 0 0 18.28 0H61.4a2.1 2.1 0 0 0 0-4.2H26.571a9.377 9.377 0 0 0-18.28 0H2.6a2.1 2.1 0 0 0 0 4.2Zm14.837-7.287A5.187 5.187 0 0 1 22.613 11a5.187 5.187 0 0 1-10.364 0 5.187 5.187 0 0 1 5.187-5.187ZM61.4 50.9H35.895a9.377 9.377 0 0 0-18.28 0H2.6a2.1 2.1 0 0 0 0 4.2h15.015a9.377 9.377 0 0 0 18.28 0H61.4a2.1 2.1 0 0 0 0-4.2Zm-34.65 7.287A5.187 5.187 0 1 1 31.937 53a5.187 5.187 0 0 1-5.187 5.187Z"
-                          data-name="Layer 47"
-                          data-original="#000000"
-                        />
-                      </svg>
-                      <span>Preferences</span>
-                    </a>
-                  </li>
-                  <li>
-                    <a
-                      href="javascript:void(0)"
-                      className="text-slate-800 text-[15px] font-medium flex items-center cursor-pointer hover:bg-gray-100 rounded-md px-3 py-2.5 transition-all duration-300"
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="currentColor"
-                        className="w-4.5 h-4.5 mr-3"
-                        viewBox="0 0 64 64"
-                      >
-                        <path
-                          d="M32.667 5.11A25.116 25.116 0 0 0 32 5.045V2.88a2.08 2.08 0 1 0-4.16 0v2.165C15.027 6.102 4.96 16.837 4.96 29.92v18.5L3.47 52.8h-.59a2.08 2.08 0 1 0 0 4.16h54.08a2.08 2.08 0 1 0 0-4.16h-.59l-1.49-4.38v-9.568a18.585 18.585 0 0 1-4.16 1.209v8.703a2.08 2.08 0 0 0 .11.67l1.145 3.366H7.865l1.144-3.366a2.08 2.08 0 0 0 .111-.67V29.92c0-11.488 9.312-20.8 20.8-20.8.142 0 .285.001.426.004a18.7 18.7 0 0 1 2.32-4.014zM23.68 61.12a2.08 2.08 0 0 1 2.08-2.08h8.32a2.08 2.08 0 1 1 0 4.16h-8.32a2.08 2.08 0 0 1-2.08-2.08z"
-                          data-original="#000000"
-                        />
-                        <g fillRule="evenodd" clipRule="evenodd">
-                          <path
-                            d="M46.56 12.909c-4.221 0-7.627 3.434-7.627 7.651s3.406 7.651 7.627 7.651c4.22 0 7.626-3.434 7.626-7.651s-3.406-7.651-7.626-7.651zm-3.467 7.651c0-1.936 1.56-3.491 3.467-3.491 1.906 0 3.466 1.555 3.466 3.491s-1.56 3.491-3.466 3.491c-1.906 0-3.467-1.555-3.467-3.491z"
-                            data-original="#000000"
-                          />
-                          <path
-                            d="M44.342 2.88a2.08 2.08 0 0 0-2.005 1.526l-.75 2.711a14.256 14.256 0 0 0-4.138 2.402l-2.709-.703a2.08 2.08 0 0 0-2.325.978l-2.218 3.86a2.08 2.08 0 0 0 .316 2.49l1.964 2.01a14.478 14.478 0 0 0 0 4.813l-1.965 2.009a2.08 2.08 0 0 0-.315 2.49l2.218 3.86a2.08 2.08 0 0 0 2.325.978l2.709-.702a14.256 14.256 0 0 0 4.139 2.402l.749 2.71a2.08 2.08 0 0 0 2.005 1.526h4.436a2.08 2.08 0 0 0 2.005-1.526l.75-2.71a14.257 14.257 0 0 0 4.14-2.402l2.706.702a2.08 2.08 0 0 0 2.326-.978l2.218-3.86a2.08 2.08 0 0 0-.316-2.49l-1.964-2.01a14.477 14.477 0 0 0 0-4.813l1.965-2.009a2.08 2.08 0 0 0 .315-2.49l-2.219-3.86a2.08 2.08 0 0 0-2.324-.978l-2.709.702a14.256 14.256 0 0 0-4.138-2.402l-.749-2.71a2.08 2.08 0 0 0-2.007-1.526zm.956 6.421.626-2.261h1.271l.627 2.261a2.08 2.08 0 0 0 1.446 1.45 10.098 10.098 0 0 1 4.38 2.544 2.08 2.08 0 0 0 1.983.532l2.257-.585.644 1.12-1.64 1.678a2.08 2.08 0 0 0-.528 1.971c.208.812.32 1.666.32 2.549s-.112 1.737-.32 2.549a2.08 2.08 0 0 0 .527 1.97l1.641 1.68-.644 1.12-2.257-.586a2.08 2.08 0 0 0-1.982.532 10.096 10.096 0 0 1-4.38 2.544 2.08 2.08 0 0 0-1.447 1.45l-.628 2.261h-1.272l-.624-2.261a2.08 2.08 0 0 0-1.447-1.45 10.097 10.097 0 0 1-4.38-2.544 2.08 2.08 0 0 0-1.983-.532l-2.257.585-.645-1.12 1.642-1.678a2.08 2.08 0 0 0 .527-1.971c-.208-.812-.32-1.666-.32-2.549s.112-1.737.32-2.548a2.08 2.08 0 0 0-.527-1.972l-1.642-1.678.645-1.12 2.257.585a2.08 2.08 0 0 0 1.982-.532 10.097 10.097 0 0 1 4.38-2.544 2.08 2.08 0 0 0 1.447-1.45z"
-                            data-original="#000000"
-                          />
-                        </g>
-                      </svg>
-                      <span>Notification Settings</span>
-                    </a>
-                  </li>
-                  <li>
-                    <a
-                      href="javascript:void(0)"
-                      className="text-slate-800 text-[15px] font-medium flex items-center cursor-pointer hover:bg-gray-100 rounded-md px-3 py-2.5 transition-all duration-300"
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="currentColor"
-                        className="w-4.5 h-4.5 mr-3"
-                        viewBox="0 0 32 32"
-                      >
-                        <path
-                          fillRule="evenodd"
-                          d="M20.063 7.94a3.96 3.96 0 0 1-5.342 3.713l2.362 2.815a6.601 6.601 0 1 0-7.24-8.627l2.364 2.818a3.96 3.96 0 1 1 7.856-.718zm-7.885 9.415L3.718 7.35A1.32 1.32 0 1 1 5.73 5.645l20.055 23.712a1.32 1.32 0 1 1-2.015 1.705l-2.03-2.401a8.886 8.886 0 0 1-2.645.4H13.11a8.886 8.886 0 0 1-8.886-8.886c0-.518.272-.993.747-1.198 1.095-.47 3.427-1.27 7.208-1.622zm7.634 9.025c-.235.026-.474.04-.716.04H13.11a6.248 6.248 0 0 1-6.184-5.362c1.35-.454 3.751-1.047 7.37-1.2zm-.347-9.072 2.476 2.95a21.397 21.397 0 0 1 3.34.8 6.204 6.204 0 0 1-.78 2.25l1.77 2.111a8.845 8.845 0 0 0 1.712-5.244c0-.518-.272-.993-.747-1.198-1.149-.493-3.657-1.349-7.771-1.67z"
-                          clipRule="evenodd"
-                          data-original="#000000"
-                        />
-                      </svg>
-                      <span>Account Deactivation</span>
-                    </a>
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        </nav>
-        <button
-          id="open-sidebar"
-          className="lg:hidden ml-4 mt-4 fixed top-0 left-0 bg-white z-[50]"
-        >
-          <svg
-            className="w-7 h-7"
-            fill="#000"
-            viewBox="0 0 20 20"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path
-              fillRule="evenodd"
-              d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"
-              clipRule="evenodd"
-            />
-          </svg>
+    <span style={{ background: s.bg, color: s.color, fontSize: 11, padding: "3px 10px", borderRadius: 20, fontWeight: 700, textTransform: "capitalize", letterSpacing: "0.02em" }}>
+      {role}
+    </span>
+  );
+};
+
+const ApprovalPill = ({ approved, status }) => {
+  if (approved) return <Pill bg="#d1fae5" color="#065f46" dot="●">Live</Pill>;
+  if (status === "Pending") return <Pill bg="#fef3c7" color="#92400e" dot="●">Pending</Pill>;
+  return <Pill bg="#fee2e2" color="#991b1b" dot="●">Rejected</Pill>;
+};
+
+const Pill = ({ bg, color, dot, children }) => (
+  <span style={{ display: "inline-flex", alignItems: "center", gap: 5, background: bg, color, fontSize: 11, padding: "3px 10px", borderRadius: 20, fontWeight: 700 }}>
+    {dot && <span style={{ fontSize: 8 }}>{dot}</span>}
+    {children}
+  </span>
+);
+
+const FeePill = ({ status }) => {
+  const map = { paid: ["#d1fae5","#065f46","Paid"], unpaid: ["#fee2e2","#991b1b","Unpaid"], waived: ["#f3f4f6","#374151","Waived"] };
+  const [bg, color, label] = map[status] || map.unpaid;
+  return <Pill bg={bg} color={color}>{label}</Pill>;
+};
+
+/* ═══════════════════════════════════════════════════════════════
+   STAT CARD
+═══════════════════════════════════════════════════════════════ */
+const StatCard = ({ label, value, sub, accent, icon }) => (
+  <div className="stat-card">
+    <div className="stat-icon-wrap" style={{ background: accent + "22", color: accent }}>{icon}</div>
+    <div className="stat-val">{value ?? "—"}</div>
+    <div className="stat-label">{label}</div>
+    {sub && <div className="stat-sub">{sub}</div>}
+  </div>
+);
+
+/* ═══════════════════════════════════════════════════════════════
+   SIDEBAR
+═══════════════════════════════════════════════════════════════ */
+const TABS = [
+  { id: "overview",   label: "Overview",    Icon: IC.Grid },
+  { id: "properties", label: "Properties",  Icon: IC.Building },
+  { id: "users",      label: "Users",       Icon: IC.Users },
+  { id: "agents",     label: "Agents",      Icon: IC.Agent },
+  { id: "fees",       label: "Seller Fees", Icon: IC.DollarSign },
+];
+
+const Sidebar = ({ tab, setTab, user, onLogout, badgeCounts }) => (
+  <aside className="sidebar">
+    <div className="sb-logo">
+      <div className="sb-logo-mark"><IC.Home /></div>
+      <div>
+        <div className="sb-logo-name">NestFind</div>
+        <div className="sb-logo-sub">Admin Panel</div>
+      </div>
+    </div>
+
+    <div className="sb-user">
+      <div className="sb-avatar">{user?.name?.charAt(0).toUpperCase()}</div>
+      <div>
+        <div className="sb-uname">{user?.name}</div>
+        <div className="sb-uemail">{user?.email}</div>
+      </div>
+    </div>
+
+    <nav className="sb-nav">
+      <p className="sb-nav-label">Navigation</p>
+      {TABS.map(({ id, label, Icon }) => (
+        <button key={id} className={`sb-item${tab === id ? " active" : ""}`} onClick={() => setTab(id)}>
+          <Icon />
+          <span>{label}</span>
+          {badgeCounts?.[id] > 0 && <span className="sb-badge">{badgeCounts[id]}</span>}
         </button>
-        <section className="main-content w-full px-6">
-          <header className="z-50 bg-[#f7f6f9] sticky top-0 pt-4">
-            <div className="flex flex-wrap items-center px-6 py-2 bg-white shadow-md min-h-[56px] rounded-md w-full relative tracking-wide">
-              <div className="flex items-center flex-wrap gap-x-8 gap-y-4 z-50 w-full">
-                <div className="flex items-center gap-4 py-1 outline-none border-none">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 192.904 192.904"
-                    className="w-5 cursor-pointer fill-current"
-                  >
-                    <path d="m190.707 180.101-47.078-47.077c11.702-14.072 18.752-32.142 18.752-51.831C162.381 36.423 125.959 0 81.191 0 36.422 0 0 36.423 0 81.193c0 44.767 36.422 81.187 81.191 81.187 19.688 0 37.759-7.049 51.831-18.751l47.079 47.078a7.474 7.474 0 0 0 5.303 2.197 7.498 7.498 0 0 0 5.303-12.803zM15 81.193C15 44.694 44.693 15 81.191 15c36.497 0 66.189 29.694 66.189 66.193 0 36.496-29.692 66.187-66.189 66.187C44.693 147.38 15 117.689 15 81.193z" />
-                  </svg>
-                  <input
-                    type="text"
-                    placeholder="Search something..."
-                    className="w-full text-sm bg-transparent rounded outline-none"
-                  />
+      ))}
+    </nav>
+
+    <button className="sb-logout" onClick={onLogout}>
+      <IC.LogOut /> Sign out
+    </button>
+  </aside>
+);
+
+/* ═══════════════════════════════════════════════════════════════
+   OVERVIEW TAB
+═══════════════════════════════════════════════════════════════ */
+const OverviewTab = ({ stats, pending, onApprove, onReject, loadingId }) => (
+  <div className="tab-body">
+    <div className="tab-head">
+      <h2 className="tab-title">Site Overview</h2>
+      <p className="tab-sub">Real-time snapshot of NestFind platform activity</p>
+    </div>
+
+    <div className="stats-grid">
+      <StatCard icon={<IC.Users />}      accent="#2563eb" label="Total Users"     value={stats?.users?.total}      sub={`${stats?.users?.sellers ?? 0} sellers · ${stats?.users?.buyers ?? 0} buyers`} />
+      <StatCard icon={<IC.Building />}   accent="#7c3aed" label="Total Listings"  value={stats?.properties?.total} />
+      <StatCard icon={<IC.Clock />}      accent="#d97706" label="Pending Approval" value={stats?.properties?.pending} sub="Needs review" />
+      <StatCard icon={<IC.Check />}      accent="#16a34a" label="Live Listings"   value={stats?.properties?.approved} />
+      <StatCard icon={<IC.Agent />}      accent="#0891b2" label="Active Agents"   value={stats?.agents?.active}    sub={`${stats?.agents?.total ?? 0} total`} />
+      <StatCard icon={<IC.CreditCard />} accent="#be185d" label="Fee Revenue"     value={fmtPrice(stats?.fees?.collected)} sub={`${stats?.fees?.unpaid ?? 0} unpaid`} />
+    </div>
+
+    {/* Pending approvals */}
+    <div className="card">
+      <div className="card-head">
+        <h3 className="card-title">
+          <IC.AlertCircle style={{ color: "#d97706" }} /> Pending Property Approvals
+        </h3>
+        <span className="badge-count">{pending.length} waiting</span>
+      </div>
+
+      {pending.length === 0 ? (
+        <div className="empty"><IC.Check style={{ color: "#16a34a" }} /><span>All caught up — no pending listings</span></div>
+      ) : (
+        <div className="pending-list">
+          {pending.map((p) => (
+            <div key={p._id} className="pending-row">
+              <div className="pending-thumb">
+                {p.thumbnail ? <img src={p.thumbnail} alt="" /> : <IC.Building />}
+              </div>
+              <div className="pending-info">
+                <div className="pending-title">{p.title}</div>
+                <div className="pending-meta">
+                  {p.address?.city}, {p.address?.state} · {fmtPrice(p.price)} · by <strong>{p.userId?.name}</strong>
                 </div>
-                <div className="flex items-center gap-8 ml-auto">
-                  <div className="flex items-center space-x-6">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="w-5 h-5 cursor-pointer fill-slate-800 hover:fill-[#077bff]"
-                      viewBox="0 0 511 511.999"
-                    >
-                      <path
-                        d="M498.7 222.695c-.016-.011-.028-.027-.04-.039L289.805 13.81C280.902 4.902 269.066 0 256.477 0c-12.59 0-24.426 4.902-33.332 13.809L14.398 222.55c-.07.07-.144.144-.21.215-18.282 18.386-18.25 48.218.09 66.558 8.378 8.383 19.44 13.235 31.273 13.746.484.047.969.07 1.457.07h8.32v153.696c0 30.418 24.75 55.164 55.168 55.164h81.711c8.285 0 15-6.719 15-15V376.5c0-13.879 11.293-25.168 25.172-25.168h48.195c13.88 0 25.168 11.29 25.168 25.168V497c0 8.281 6.715 15 15 15h81.711c30.422 0 55.168-24.746 55.168-55.164V303.14h7.719c12.586 0 24.422-4.903 33.332-13.813 18.36-18.367 18.367-48.254.027-66.633zm-21.243 45.422a17.03 17.03 0 0 1-12.117 5.024h-22.72c-8.285 0-15 6.714-15 15v168.695c0 13.875-11.289 25.164-25.168 25.164h-66.71V376.5c0-30.418-24.747-55.168-55.169-55.168H232.38c-30.422 0-55.172 24.75-55.172 55.168V482h-66.71c-13.876 0-25.169-11.29-25.169-25.164V288.14c0-8.286-6.715-15-15-15H48a13.9 13.9 0 0 0-.703-.032c-4.469-.078-8.66-1.851-11.8-4.996-6.68-6.68-6.68-17.55 0-24.234.003 0 .003-.004.007-.008l.012-.012L244.363 35.02A17.003 17.003 0 0 1 256.477 30c4.574 0 8.875 1.781 12.113 5.02l208.8 208.796.098.094c6.645 6.692 6.633 17.54-.031 24.207zm0 0"
-                        data-original="#000000"
-                      />
-                    </svg>
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="w-5 h-5 cursor-pointer fill-slate-800 hover:fill-[#077bff]"
-                      viewBox="0 0 371.263 371.263"
-                    >
-                      <path
-                        d="M305.402 234.794v-70.54c0-52.396-33.533-98.085-79.702-115.151.539-2.695.838-5.449.838-8.204C226.539 18.324 208.215 0 185.64 0s-40.899 18.324-40.899 40.899c0 2.695.299 5.389.778 7.964-15.868 5.629-30.539 14.551-43.054 26.647-23.593 22.755-36.587 53.354-36.587 86.169v73.115c0 2.575-2.096 4.731-4.731 4.731-22.096 0-40.959 16.647-42.995 37.845-1.138 11.797 2.755 23.533 10.719 32.276 7.904 8.683 19.222 13.713 31.018 13.713h72.217c2.994 26.887 25.869 47.905 53.534 47.905s50.54-21.018 53.534-47.905h72.217c11.797 0 23.114-5.03 31.018-13.713 7.904-8.743 11.797-20.479 10.719-32.276-2.036-21.198-20.958-37.845-42.995-37.845a4.704 4.704 0 0 1-4.731-4.731zM185.64 23.952c9.341 0 16.946 7.605 16.946 16.946 0 .778-.12 1.497-.24 2.275-4.072-.599-8.204-1.018-12.336-1.138-7.126-.24-14.132.24-21.078 1.198-.12-.778-.24-1.497-.24-2.275.002-9.401 7.607-17.006 16.948-17.006zm0 323.358c-14.431 0-26.527-10.3-29.342-23.952h58.683c-2.813 13.653-14.909 23.952-29.341 23.952zm143.655-67.665c.479 5.15-1.138 10.12-4.551 13.892-3.533 3.773-8.204 5.868-13.353 5.868H59.89c-5.15 0-9.82-2.096-13.294-5.868-3.473-3.772-5.09-8.743-4.611-13.892.838-9.042 9.282-16.168 19.162-16.168 15.809 0 28.683-12.874 28.683-28.683v-73.115c0-26.228 10.419-50.719 29.282-68.923 18.024-17.425 41.498-26.887 66.528-26.887 1.198 0 2.335 0 3.533.06 50.839 1.796 92.277 45.929 92.277 98.325v70.54c0 15.809 12.874 28.683 28.683 28.683 9.88 0 18.264 7.126 19.162 16.168z"
-                        data-original="#000000"
-                      />
-                    </svg>
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="w-5 h-5 cursor-pointer fill-slate-800 hover:fill-[#077bff]"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        d="M18 2c2.206 0 4 1.794 4 4v12c0 2.206-1.794 4-4 4H6c-2.206 0-4-1.794-4-4V6c0-2.206 1.794-4 4-4zm0-2H6a6 6 0 0 0-6 6v12a6 6 0 0 0 6 6h12a6 6 0 0 0 6-6V6a6 6 0 0 0-6-6z"
-                        data-original="#000000"
-                      />
-                      <path
-                        d="M12 18a1 1 0 0 1-1-1V7a1 1 0 0 1 2 0v10a1 1 0 0 1-1 1z"
-                        data-original="#000000"
-                      />
-                      <path
-                        d="M6 12a1 1 0 0 1 1-1h10a1 1 0 0 1 0 2H7a1 1 0 0 1-1-1z"
-                        data-original="#000000"
-                      />
-                    </svg>
-                  </div>
-                  <div className="dropdown-menu relative flex shrink-0 group">
-                    <img
-                      src="https://readymadeui.com/team-1.webp"
-                      alt="profile-pic"
-                      className="w-9 h-9 rounded-full border-2 border-gray-300 cursor-pointer"
-                    />
-                    <div className="dropdown-content hidden group-hover:block shadow-md p-2 bg-white rounded-md absolute top-9 right-0 w-56">
-                      <div className="w-full">
-                        <a
-                          href="javascript:void(0)"
-                          className="text-[15px] text-slate-800 font-medium cursor-pointer flex items-center p-2 rounded-md hover:bg-gray-100 dropdown-item transition duration-300 ease-in-out"
-                        >
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            className="w-4.5 h-4.5 mr-3 fill-current"
-                            viewBox="0 0 512 512"
-                          >
-                            <path
-                              d="M437.02 74.98C388.668 26.63 324.379 0 256 0S123.332 26.629 74.98 74.98C26.63 123.332 0 187.621 0 256s26.629 132.668 74.98 181.02C123.332 485.37 187.621 512 256 512s132.668-26.629 181.02-74.98C485.37 388.668 512 324.379 512 256s-26.629-132.668-74.98-181.02zM111.105 429.297c8.454-72.735 70.989-128.89 144.895-128.89 38.96 0 75.598 15.179 103.156 42.734 23.281 23.285 37.965 53.687 41.742 86.152C361.641 462.172 311.094 482 256 482s-105.637-19.824-144.895-52.703zM256 269.507c-42.871 0-77.754-34.882-77.754-77.753C178.246 148.879 213.13 114 256 114s77.754 34.879 77.754 77.754c0 42.871-34.883 77.754-77.754 77.754zm170.719 134.427a175.9 175.9 0 0 0-46.352-82.004c-18.437-18.438-40.25-32.27-64.039-40.938 28.598-19.394 47.426-52.16 47.426-89.238C363.754 132.34 315.414 84 256 84s-107.754 48.34-107.754 107.754c0 37.098 18.844 69.875 47.465 89.266-21.887 7.976-42.14 20.308-59.566 36.542-25.235 23.5-42.758 53.465-50.883 86.348C50.852 364.242 30 312.512 30 256 30 131.383 131.383 30 256 30s226 101.383 226 226c0 56.523-20.86 108.266-55.281 147.934zm0 0"
-                              data-original="#000000"
-                            />
-                          </svg>
-                          Account
-                        </a>
-                        <hr className="my-2 -mx-2 border-gray-200" />
-                        <a
-                          href="javascript:void(0)"
-                          className="text-[15px] text-slate-800 font-medium cursor-pointer flex items-center p-2 rounded-md hover:bg-gray-100 dropdown-item transition duration-300 ease-in-out"
-                        >
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            fill="currentColor"
-                            className="w-4.5 h-4.5 mr-3 fill-current"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              d="M19.56 23.253H4.44a4.051 4.051 0 0 1-4.05-4.05v-9.115c0-1.317.648-2.56 1.728-3.315l7.56-5.292a4.062 4.062 0 0 1 4.644 0l7.56 5.292a4.056 4.056 0 0 1 1.728 3.315v9.115a4.051 4.051 0 0 1-4.05 4.05zM12 2.366a2.45 2.45 0 0 0-1.393.443l-7.56 5.292a2.433 2.433 0 0 0-1.037 1.987v9.115c0 1.34 1.09 2.43 2.43 2.43h15.12c1.34 0 2.43-1.09 2.43-2.43v-9.115c0-.788-.389-1.533-1.037-1.987l-7.56-5.292A2.438 2.438 0 0 0 12 2.377z"
-                              data-original="#000000"
-                            />
-                            <path
-                              d="M16.32 23.253H7.68a.816.816 0 0 1-.81-.81v-5.4c0-2.83 2.3-5.13 5.13-5.13s5.13 2.3 5.13 5.13v5.4c0 .443-.367.81-.81.81zm-7.83-1.62h7.02v-4.59c0-1.933-1.577-3.51-3.51-3.51s-3.51 1.577-3.51 3.51z"
-                              data-original="#000000"
-                            />
-                          </svg>
-                          Dashboard
-                        </a>
-                        <a
-                          href="javascript:void(0)"
-                          className="text-[15px] text-slate-800 font-medium cursor-pointer flex items-center p-2 rounded-md hover:bg-gray-100 dropdown-item transition duration-300 ease-in-out"
-                        >
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            className="w-4.5 h-4.5 mr-3 fill-current"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              d="M18 2c2.206 0 4 1.794 4 4v12c0 2.206-1.794 4-4 4H6c-2.206 0-4-1.794-4-4V6c0-2.206 1.794-4 4-4zm0-2H6a6 6 0 0 0-6 6v12a6 6 0 0 0 6 6h12a6 6 0 0 0 6-6V6a6 6 0 0 0-6-6z"
-                              data-original="#000000"
-                            />
-                            <path
-                              d="M12 18a1 1 0 0 1-1-1V7a1 1 0 0 1 2 0v10a1 1 0 0 1-1 1z"
-                              data-original="#000000"
-                            />
-                            <path
-                              d="M6 12a1 1 0 0 1 1-1h10a1 1 0 0 1 0 2H7a1 1 0 0 1-1-1z"
-                              data-original="#000000"
-                            />
-                          </svg>
-                          Posts
-                        </a>
-                        <a
-                          href="javascript:void(0)"
-                          className="text-[15px] text-slate-800 font-medium cursor-pointer flex items-center p-2 rounded-md hover:bg-gray-100 dropdown-item transition duration-300 ease-in-out"
-                        >
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            className="w-4.5 h-4.5 mr-3 fill-current"
-                            viewBox="0 0 510 510"
-                          >
-                            <g fillOpacity=".9">
-                              <path
-                                d="M255 0C114.75 0 0 114.75 0 255s114.75 255 255 255 255-114.75 255-255S395.25 0 255 0zm0 459c-112.2 0-204-91.8-204-204S142.8 51 255 51s204 91.8 204 204-91.8 204-204 204z"
-                                data-original="#000000"
-                              />
-                              <path
-                                d="M267.75 127.5H229.5v153l132.6 81.6 20.4-33.15-114.75-68.85z"
-                                data-original="#000000"
-                              />
-                            </g>
-                          </svg>
-                          Schedules
-                        </a>
-                        <a
-                          href="javascript:void(0)"
-                          className="text-[15px] text-slate-800 font-medium cursor-pointer flex items-center p-2 rounded-md hover:bg-gray-100 dropdown-item transition duration-300 ease-in-out"
-                        >
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            className="w-4.5 h-4.5 mr-3 fill-current"
-                            viewBox="0 0 6 6"
-                          >
-                            <path
-                              d="M3.172.53a.265.266 0 0 0-.262.268v2.127a.265.266 0 0 0 .53 0V.798A.265.266 0 0 0 3.172.53zm1.544.532a.265.266 0 0 0-.026 0 .265.266 0 0 0-.147.47c.459.391.749.973.749 1.626 0 1.18-.944 2.131-2.116 2.131A2.12 2.12 0 0 1 1.06 3.16c0-.65.286-1.228.74-1.62a.265.266 0 1 0-.344-.404A2.667 2.667 0 0 0 .53 3.158a2.66 2.66 0 0 0 2.647 2.663 2.657 2.657 0 0 0 2.645-2.663c0-.812-.363-1.542-.936-2.03a.265.266 0 0 0-.17-.066z"
-                              data-original="#000000"
-                            />
-                          </svg>
-                          Logout
-                        </a>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+              </div>
+              <div className="row-actions">
+                <button className="btn-approve" onClick={() => onApprove(p._id)} disabled={loadingId === p._id}>
+                  <IC.Check /> Approve
+                </button>
+                <button className="btn-reject" onClick={() => onReject(p._id)} disabled={loadingId === p._id}>
+                  <IC.X /> Reject
+                </button>
               </div>
             </div>
-          </header>
-          <div className="my-6 px-2">
-            {/* <div className="flex items-start gap-6 flex-wrap">
-              <div className="bg-white [box-shadow:0_4px_12px_-5px_rgba(0,0,0,0.4)] p-6 w-full max-w-sm rounded-lg overflow-hidden">
-                <div className="inline-block bg-[#edf2f7] rounded-lg py-2 px-3">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="w-6"
-                    viewBox="0 0 511.999 511.999"
-                  >
-                    <path
-                      fill="#06d"
-                      d="m38.563 418.862 22.51 39.042c4.677 8.219 11.41 14.682 19.319 19.388l80.744-57.248.147-82.19-80.577-36.303L0 337.565c-.016 9.09 2.313 18.185 6.991 26.404z"
-                      data-original="#0066dd"
-                    />
-                    <path
-                      fill="#00ad3c"
-                      d="m256.293 173.808 4.212-107.064-84.604-32.663c-7.926 4.678-14.682 11.117-19.389 19.319L7.085 311.186C2.379 319.389.016 328.475 0 337.565l161.283.288z"
-                      data-original="#00ad3c"
-                    />
-                    <path
-                      fill="#00831e"
-                      d="m256.293 173.808 77.503-41.694 3.387-97.745c-7.909-4.706-16.996-7.068-26.379-7.085l-108.499-.194c-9.384-.017-18.479 2.606-26.405 6.991z"
-                      data-original="#00831e"
-                    />
-                    <path
-                      fill="#0084ff"
-                      d="m350.716 338.192-189.434-.338-80.89 139.438c7.909 4.706 16.996 7.068 26.379 7.085l297.933.532c9.384.017 18.479-2.606 26.405-6.991l.314-93.66z"
-                      data-original="#0084ff"
-                    />
-                    <path
-                      fill="#ff4131"
-                      d="M431.109 477.919c7.926-4.678 14.682-11.117 19.388-19.319l9.413-16.111 45.005-77.629c4.706-8.202 7.069-17.288 7.085-26.379l-93.221-49.051-67.768 48.764z"
-                      data-original="#ff4131"
-                    />
-                    <path
-                      fill="#ffba00"
-                      d="m430.756 182.917-74.253-129.16c-4.677-8.22-11.41-14.683-19.32-19.389l-80.891 139.439 94.423 164.385 160.99.288c.016-9.09-2.314-18.185-6.991-26.405z"
-                      data-original="#ffba00"
-                    />
-                  </svg>
-                </div>
-                <div className="mt-4">
-                  <h3 className="text-xl font-semibold text-slate-800">
-                    Heading
-                  </h3>
-                  <p className="mt-2 text-sm text-slate-800">
-                    Lorem ipsum dolor sit amet, consectetur.
-                  </p>
-                </div>
-                <div className="mt-6">
-                  <div className="flex mb-2">
-                    <p className="text-sm text-slate-800 flex-1">25 GB</p>
-                    <p className="text-sm text-slate-800">50 GB</p>
-                  </div>
-                  <div className="bg-gray-300 rounded-full w-full h-2.5">
-                    <div className="w-1/2 h-full rounded-full bg-blue-600 flex items-center" />
-                  </div>
-                </div>
-              </div>
-              <div className="bg-white [box-shadow:0_4px_12px_-5px_rgba(0,0,0,0.4)] p-6 w-full max-w-sm rounded-lg overflow-hidden">
-                <div className="inline-block bg-[#edf2f7] rounded-lg py-2 px-3">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="w-6"
-                    viewBox="0 0 511.999 511.999"
-                  >
-                    <path
-                      fill="#06d"
-                      d="m38.563 418.862 22.51 39.042c4.677 8.219 11.41 14.682 19.319 19.388l80.744-57.248.147-82.19-80.577-36.303L0 337.565c-.016 9.09 2.313 18.185 6.991 26.404z"
-                      data-original="#0066dd"
-                    />
-                    <path
-                      fill="#00ad3c"
-                      d="m256.293 173.808 4.212-107.064-84.604-32.663c-7.926 4.678-14.682 11.117-19.389 19.319L7.085 311.186C2.379 319.389.016 328.475 0 337.565l161.283.288z"
-                      data-original="#00ad3c"
-                    />
-                    <path
-                      fill="#00831e"
-                      d="m256.293 173.808 77.503-41.694 3.387-97.745c-7.909-4.706-16.996-7.068-26.379-7.085l-108.499-.194c-9.384-.017-18.479 2.606-26.405 6.991z"
-                      data-original="#00831e"
-                    />
-                    <path
-                      fill="#0084ff"
-                      d="m350.716 338.192-189.434-.338-80.89 139.438c7.909 4.706 16.996 7.068 26.379 7.085l297.933.532c9.384.017 18.479-2.606 26.405-6.991l.314-93.66z"
-                      data-original="#0084ff"
-                    />
-                    <path
-                      fill="#ff4131"
-                      d="M431.109 477.919c7.926-4.678 14.682-11.117 19.388-19.319l9.413-16.111 45.005-77.629c4.706-8.202 7.069-17.288 7.085-26.379l-93.221-49.051-67.768 48.764z"
-                      data-original="#ff4131"
-                    />
-                    <path
-                      fill="#ffba00"
-                      d="m430.756 182.917-74.253-129.16c-4.677-8.22-11.41-14.683-19.32-19.389l-80.891 139.439 94.423 164.385 160.99.288c.016-9.09-2.314-18.185-6.991-26.405z"
-                      data-original="#ffba00"
-                    />
-                  </svg>
-                </div>
-                <div className="mt-4">
-                  <h3 className="text-xl font-semibold text-slate-800">
-                    Heading
-                  </h3>
-                  <p className="mt-2 text-sm text-slate-800">
-                    Lorem ipsum dolor sit amet, consectetur.
-                  </p>
-                </div>
-                <div className="mt-6">
-                  <div className="flex mb-2">
-                    <p className="text-sm text-slate-800 flex-1">25 GB</p>
-                    <p className="text-sm text-slate-800">50 GB</p>
-                  </div>
-                  <div className="bg-gray-300 rounded-full w-full h-2.5">
-                    <div className="w-1/2 h-full rounded-full bg-blue-600 flex items-center" />
-                  </div>
-                </div>
-              </div>
-              <div className="bg-white [box-shadow:0_4px_12px_-5px_rgba(0,0,0,0.4)] p-6 w-full max-w-sm rounded-lg overflow-hidden">
-                <div className="inline-block bg-[#edf2f7] rounded-lg py-2 px-3">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="w-6"
-                    viewBox="0 0 511.999 511.999"
-                  >
-                    <path
-                      fill="#06d"
-                      d="m38.563 418.862 22.51 39.042c4.677 8.219 11.41 14.682 19.319 19.388l80.744-57.248.147-82.19-80.577-36.303L0 337.565c-.016 9.09 2.313 18.185 6.991 26.404z"
-                      data-original="#0066dd"
-                    />
-                    <path
-                      fill="#00ad3c"
-                      d="m256.293 173.808 4.212-107.064-84.604-32.663c-7.926 4.678-14.682 11.117-19.389 19.319L7.085 311.186C2.379 319.389.016 328.475 0 337.565l161.283.288z"
-                      data-original="#00ad3c"
-                    />
-                    <path
-                      fill="#00831e"
-                      d="m256.293 173.808 77.503-41.694 3.387-97.745c-7.909-4.706-16.996-7.068-26.379-7.085l-108.499-.194c-9.384-.017-18.479 2.606-26.405 6.991z"
-                      data-original="#00831e"
-                    />
-                    <path
-                      fill="#0084ff"
-                      d="m350.716 338.192-189.434-.338-80.89 139.438c7.909 4.706 16.996 7.068 26.379 7.085l297.933.532c9.384.017 18.479-2.606 26.405-6.991l.314-93.66z"
-                      data-original="#0084ff"
-                    />
-                    <path
-                      fill="#ff4131"
-                      d="M431.109 477.919c7.926-4.678 14.682-11.117 19.388-19.319l9.413-16.111 45.005-77.629c4.706-8.202 7.069-17.288 7.085-26.379l-93.221-49.051-67.768 48.764z"
-                      data-original="#ff4131"
-                    />
-                    <path
-                      fill="#ffba00"
-                      d="m430.756 182.917-74.253-129.16c-4.677-8.22-11.41-14.683-19.32-19.389l-80.891 139.439 94.423 164.385 160.99.288c.016-9.09-2.314-18.185-6.991-26.405z"
-                      data-original="#ffba00"
-                    />
-                  </svg>
-                </div>
-                <div className="mt-4">
-                  <h3 className="text-xl font-semibold text-slate-800">
-                    Heading
-                  </h3>
-                  <p className="mt-2 text-sm text-slate-800">
-                    Lorem ipsum dolor sit amet, consectetur.
-                  </p>
-                </div>
-                <div className="mt-6">
-                  <div className="flex mb-2">
-                    <p className="text-sm text-slate-800 flex-1">25 GB</p>
-                    <p className="text-sm text-slate-800">50 GB</p>
-                  </div>
-                  <div className="bg-gray-300 rounded-full w-full h-2.5">
-                    <div className="w-1/2 h-full rounded-full bg-blue-600 flex items-center" />
-                  </div>
-                </div>
-              </div>
-              <div className="bg-white [box-shadow:0_4px_12px_-5px_rgba(0,0,0,0.4)] p-6 w-full max-w-sm rounded-lg overflow-hidden">
-                <div className="inline-block bg-[#edf2f7] rounded-lg py-2 px-3">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="w-6"
-                    viewBox="0 0 511.999 511.999"
-                  >
-                    <path
-                      fill="#06d"
-                      d="m38.563 418.862 22.51 39.042c4.677 8.219 11.41 14.682 19.319 19.388l80.744-57.248.147-82.19-80.577-36.303L0 337.565c-.016 9.09 2.313 18.185 6.991 26.404z"
-                      data-original="#0066dd"
-                    />
-                    <path
-                      fill="#00ad3c"
-                      d="m256.293 173.808 4.212-107.064-84.604-32.663c-7.926 4.678-14.682 11.117-19.389 19.319L7.085 311.186C2.379 319.389.016 328.475 0 337.565l161.283.288z"
-                      data-original="#00ad3c"
-                    />
-                    <path
-                      fill="#00831e"
-                      d="m256.293 173.808 77.503-41.694 3.387-97.745c-7.909-4.706-16.996-7.068-26.379-7.085l-108.499-.194c-9.384-.017-18.479 2.606-26.405 6.991z"
-                      data-original="#00831e"
-                    />
-                    <path
-                      fill="#0084ff"
-                      d="m350.716 338.192-189.434-.338-80.89 139.438c7.909 4.706 16.996 7.068 26.379 7.085l297.933.532c9.384.017 18.479-2.606 26.405-6.991l.314-93.66z"
-                      data-original="#0084ff"
-                    />
-                    <path
-                      fill="#ff4131"
-                      d="M431.109 477.919c7.926-4.678 14.682-11.117 19.388-19.319l9.413-16.111 45.005-77.629c4.706-8.202 7.069-17.288 7.085-26.379l-93.221-49.051-67.768 48.764z"
-                      data-original="#ff4131"
-                    />
-                    <path
-                      fill="#ffba00"
-                      d="m430.756 182.917-74.253-129.16c-4.677-8.22-11.41-14.683-19.32-19.389l-80.891 139.439 94.423 164.385 160.99.288c.016-9.09-2.314-18.185-6.991-26.405z"
-                      data-original="#ffba00"
-                    />
-                  </svg>
-                </div>
-                <div className="mt-4">
-                  <h3 className="text-xl font-semibold text-slate-800">
-                    Heading
-                  </h3>
-                  <p className="mt-2 text-sm text-slate-800">
-                    Lorem ipsum dolor sit amet, consectetur.
-                  </p>
-                </div>
-                <div className="mt-6">
-                  <div className="flex mb-2">
-                    <p className="text-sm text-slate-800 flex-1">25 GB</p>
-                    <p className="text-sm text-slate-800">50 GB</p>
-                  </div>
-                  <div className="bg-gray-300 rounded-full w-full h-2.5">
-                    <div className="w-1/2 h-full rounded-full bg-blue-600 flex items-center" />
-                  </div>
-                </div>
-              </div>
-              <div />
-            </div> */}
-            <Outlet />
+          ))}
+        </div>
+      )}
+    </div>
+  </div>
+);
+
+/* ═══════════════════════════════════════════════════════════════
+   PROPERTIES TAB
+═══════════════════════════════════════════════════════════════ */
+const PropertiesTab = ({ onApprove, onReject, onDelete, loadingId }) => {
+  const [rows, setRows]       = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter]   = useState("all");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const q = filter === "pending" ? "?approved=false" : filter === "approved" ? "?approved=true" : "";
+      const { data } = await API.get(`/admin/properties${q}`);
+      setRows(data.properties || []);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  }, [filter]); // only re-create when filter changes
+
+  useEffect(() => { load(); }, [load]);
+
+  // ✅ FIX: wrap in arrow function so it's called on click, NOT during render
+  const handleApprove = async (id) => { await onApprove(id); load(); };
+  const handleReject  = async (id) => { await onReject(id);  load(); };
+  const handleDelete  = async (id) => {
+    if (!window.confirm("Permanently delete this property?")) return;
+    await onDelete(id);
+    load();
+  };
+
+  return (
+    <div className="tab-body">
+      <div className="tab-head-row">
+        <div><h2 className="tab-title">All Properties</h2></div>
+        <div className="filter-tabs">
+          {["all","pending","approved"].map((f) => (
+            <button key={f} className={`ftab${filter === f ? " on" : ""}`} onClick={() => setFilter(f)}>
+              {f.charAt(0).toUpperCase() + f.slice(1)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="card no-pad">
+        {loading ? <div className="loading-state"><div className="spinner" /></div>
+        : rows.length === 0 ? <div className="empty">No properties found</div>
+        : (
+          <div className="table-scroll">
+            <table className="data-table">
+              <thead>
+                <tr>{["Property","Seller","Price","Type","City","Status","Actions"].map(h => <th key={h}>{h}</th>)}</tr>
+              </thead>
+              <tbody>
+                {rows.map((p) => (
+                  <tr key={p._id}>
+                    <td>
+                      <div className="cell-title">{p.title}</div>
+                      <div className="cell-sub">{fmtDate(p.createdAt)}</div>
+                    </td>
+                    <td>
+                      <div className="cell-title">{p.userId?.name || "—"}</div>
+                      <div className="cell-sub">{p.userId?.email}</div>
+                    </td>
+                    <td><span className="price-cell">{fmtPrice(p.price)}</span></td>
+                    <td>{p.propertyInfo?.propertyType}</td>
+                    <td>{p.address?.city}</td>
+                    <td><ApprovalPill approved={p.isApprovedByCompany} status={p.status} /></td>
+                    <td>
+                      <div className="row-actions">
+                        {/* ✅ FIX: onClick uses arrow functions, never calls immediately */}
+                        {!p.isApprovedByCompany
+                          ? <button className="btn-approve sm" onClick={() => handleApprove(p._id)} disabled={loadingId === p._id}><IC.Check /> Approve</button>
+                          : <button className="btn-warn sm"    onClick={() => handleReject(p._id)}  disabled={loadingId === p._id}><IC.X /> Revoke</button>
+                        }
+                        <button className="btn-reject sm" onClick={() => handleDelete(p._id)} disabled={loadingId === p._id}>
+                          <IC.Trash />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        </section>
+        )}
       </div>
     </div>
   );
 };
 
-export default AdminLayout;
+/* ═══════════════════════════════════════════════════════════════
+   USERS TAB  (with seller approval + agent assignment display)
+═══════════════════════════════════════════════════════════════ */
+const UsersTab = () => {
+  const [users, setUsers]     = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch]   = useState("");
+  const [roleFilter, setRole] = useState("all");
+  const [actionId, setAct]    = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const p = new URLSearchParams();
+      if (roleFilter !== "all") p.set("role", roleFilter);
+      if (search) p.set("search", search);
+      const { data } = await API.get(`/admin/users?${p}`);
+      setUsers(data.users || []);
+    } catch { }
+    finally { setLoading(false); }
+  }, [roleFilter, search]);
+
+  useEffect(() => { const t = setTimeout(load, 300); return () => clearTimeout(t); }, [load]);
+
+  const patch = async (id, url, body) => {
+    setAct(id);
+    try { await API.patch(url, body); load(); }
+    catch (e) { alert(e.response?.data?.message || "Failed"); }
+    finally { setAct(null); }
+  };
+
+  const del = async (id) => {
+    if (!confirm("Permanently delete user and their data?")) return;
+    setAct(id);
+    try { await API.delete(`/admin/users/${id}`); load(); }
+    catch (e) { alert(e.response?.data?.message || "Failed"); }
+    finally { setAct(null); }
+  };
+
+  const approveSeller = (id) => patch(id, `/admin/users/${id}/approve-seller`, {});
+  const changeRole    = (id, role) => patch(id, `/admin/users/${id}/role`, { role });
+  const toggle        = (id) => patch(id, `/admin/users/${id}/toggle`, {});
+
+  return (
+    <div className="tab-body">
+      <div className="tab-head-row">
+        <h2 className="tab-title">All Users</h2>
+        <div className="search-row">
+          <div className="search-box">
+            <IC.Search /><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name or email…" />
+          </div>
+          <select className="sel" value={roleFilter} onChange={e => setRole(e.target.value)}>
+            <option value="all">All roles</option>
+            <option value="buyer">Buyer</option>
+            <option value="seller">Seller</option>
+            <option value="agent">Agent</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="card no-pad">
+        {loading ? <div className="loading-state"><div className="spinner" /></div>
+        : users.length === 0 ? <div className="empty">No users found</div>
+        : (
+          <div className="table-scroll">
+            <table className="data-table">
+              <thead>
+                <tr>{["User","Contact","Role","Seller Status","Agent Assigned","Joined","Actions"].map(h => <th key={h}>{h}</th>)}</tr>
+              </thead>
+              <tbody>
+                {users.map((u) => (
+                  <tr key={u._id} style={{ opacity: u.isActive ? 1 : 0.55 }}>
+                    <td>
+                      <div className="user-cell">
+                        <div className="u-avatar">{u.name?.charAt(0).toUpperCase()}</div>
+                        <div>
+                          <div className="cell-title">{u.name}</div>
+                          <div className="cell-sub">{u.email}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td>{u.contact || "—"}</td>
+                    <td><RolePill role={u.role} /></td>
+                    <td>
+                      {u.role === "seller"
+                        ? u.isApprovedByAdmin
+                          ? <Pill bg="#d1fae5" color="#065f46" dot="●">Approved</Pill>
+                          : <div className="double-action">
+                              <Pill bg="#fef3c7" color="#92400e" dot="●">Pending</Pill>
+                              <button className="btn-xs btn-approve" onClick={() => approveSeller(u._id)} disabled={actionId === u._id}>
+                                <IC.UserCheck style={{width:11,height:11}} /> Approve
+                              </button>
+                            </div>
+                        : <span className="na-text">—</span>
+                      }
+                    </td>
+                    <td>
+                      {u.role === "seller"
+                        ? u.assignedAgent
+                          ? <div className="agent-chip">
+                              <div className="agent-chip-avatar">{u.assignedAgent.name?.charAt(0)}</div>
+                              <span>{u.assignedAgent.name}</span>
+                            </div>
+                          : <span className="na-text">Not assigned</span>
+                        : <span className="na-text">—</span>
+                      }
+                    </td>
+                    <td>{fmtDate(u.createdAt)}</td>
+                    <td>
+                      {u.role !== "admin" && (
+                        <div className="row-actions wrap">
+                          <select className="sel sm" value={u.role} onChange={e => changeRole(u._id, e.target.value)} disabled={actionId === u._id}>
+                            <option value="buyer">Buyer</option>
+                            <option value="seller">Seller</option>
+                            <option value="agent">Agent</option>
+                            <option value="admin">Admin</option>
+                          </select>
+                          <button className={u.isActive ? "btn-warn sm" : "btn-approve sm"} onClick={() => toggle(u._id)} disabled={actionId === u._id}>
+                            {u.isActive ? "Deactivate" : "Activate"}
+                          </button>
+                          <button className="btn-reject sm" onClick={() => del(u._id)} disabled={actionId === u._id}><IC.Trash /></button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+/* ═══════════════════════════════════════════════════════════════
+   AGENTS TAB  (manage agents + assign seller ↔ agent)
+═══════════════════════════════════════════════════════════════ */
+const AgentsTab = () => {
+  const [agents, setAgents]       = useState([]);
+  const [sellers, setSellers]     = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [actionId, setAct]        = useState(null);
+  const [assigning, setAssigning] = useState(null); // agentId being assigned
+  const [sellerPick, setPick]     = useState("");
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const [ag, sl] = await Promise.all([
+        API.get("/admin/users?role=agent"),
+        API.get("/admin/users?role=seller"),
+      ]);
+      setAgents(ag.data.users || []);
+      setSellers(sl.data.users || []);
+    } catch { }
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const assignSeller = async (agentId) => {
+    if (!sellerPick) return;
+    setAct(agentId);
+    try {
+      await API.patch(`/admin/agents/${agentId}/assign-seller`, { sellerId: sellerPick });
+      setPick(""); setAssigning(null); load();
+    } catch (e) { alert(e.response?.data?.message || "Failed"); }
+    finally { setAct(null); }
+  };
+
+  const unassign = async (agentId, sellerId) => {
+    if (!confirm("Remove this seller from agent?")) return;
+    setAct(agentId);
+    try {
+      await API.patch(`/admin/agents/${agentId}/unassign-seller`, { sellerId });
+      load();
+    } catch (e) { alert(e.response?.data?.message || "Failed"); }
+    finally { setAct(null); }
+  };
+
+  const toggleAgent = async (id) => {
+    setAct(id);
+    try { await API.patch(`/admin/users/${id}/toggle`); load(); }
+    catch (e) { alert(e.response?.data?.message || "Failed"); }
+    finally { setAct(null); }
+  };
+
+  const unassignedSellers = sellers.filter(s => !s.assignedAgent);
+
+  return (
+    <div className="tab-body">
+      <div className="tab-head">
+        <h2 className="tab-title">Agent Management</h2>
+        <p className="tab-sub">Assign agents to sellers so they can assist with property sales</p>
+      </div>
+
+      {loading ? <div className="loading-state"><div className="spinner" /></div> : (
+        <div className="agents-grid">
+          {agents.length === 0 && (
+            <div className="empty">No agents found. Promote a user to Agent role in the Users tab.</div>
+          )}
+          {agents.map((ag) => {
+            const myS = sellers.filter(s => s.assignedAgent?._id === ag._id || s.assignedAgent === ag._id);
+            return (
+              <div key={ag._id} className={`agent-card${!ag.isActive ? " inactive" : ""}`}>
+                {/* Agent header */}
+                <div className="agent-card-head">
+                  <div className="agent-avatar-lg">{ag.name?.charAt(0).toUpperCase()}</div>
+                  <div className="agent-info">
+                    <div className="agent-name">{ag.name}</div>
+                    <div className="agent-email">{ag.email}</div>
+                    <div className="agent-contact">{ag.contact}</div>
+                  </div>
+                  <div className="agent-card-actions">
+                    <Pill bg={ag.isActive ? "#d1fae5" : "#fee2e2"} color={ag.isActive ? "#065f46" : "#991b1b"} dot="●">
+                      {ag.isActive ? "Active" : "Inactive"}
+                    </Pill>
+                    <button className={ag.isActive ? "btn-warn sm" : "btn-approve sm"} onClick={() => toggleAgent(ag._id)} disabled={actionId === ag._id}>
+                      {ag.isActive ? "Deactivate" : "Activate"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Sellers assigned to this agent */}
+                <div className="agent-sellers">
+                  <div className="agent-sellers-label">
+                    <IC.Users style={{width:13,height:13}} />
+                    Assigned Sellers ({myS.length})
+                  </div>
+                  {myS.length === 0
+                    ? <p className="na-text" style={{padding:"6px 0"}}>No sellers assigned yet</p>
+                    : myS.map(s => (
+                      <div key={s._id} className="assigned-seller-row">
+                        <div className="agent-chip">
+                          <div className="agent-chip-avatar">{s.name?.charAt(0)}</div>
+                          <div>
+                            <div style={{fontSize:12,fontWeight:600,color:"var(--t1)"}}>{s.name}</div>
+                            <div className="cell-sub">{s.email}</div>
+                          </div>
+                        </div>
+                        <button className="btn-reject sm" onClick={() => unassign(ag._id, s._id)} disabled={actionId === ag._id} title="Remove assignment">
+                          <IC.Unlink />
+                        </button>
+                      </div>
+                    ))
+                  }
+                </div>
+
+                {/* Assign new seller */}
+                {ag.isActive && unassignedSellers.length > 0 && (
+                  <div className="assign-row">
+                    {assigning === ag._id ? (
+                      <>
+                        <select className="sel flex1" value={sellerPick} onChange={e => setPick(e.target.value)}>
+                          <option value="">— Pick a seller —</option>
+                          {unassignedSellers.map(s => <option key={s._id} value={s._id}>{s.name} ({s.email})</option>)}
+                        </select>
+                        <button className="btn-approve sm" onClick={() => assignSeller(ag._id)} disabled={!sellerPick || actionId === ag._id}>
+                          <IC.Link /> Assign
+                        </button>
+                        <button className="btn-ghost sm" onClick={() => { setAssigning(null); setPick(""); }}>Cancel</button>
+                      </>
+                    ) : (
+                      <button className="btn-primary-outline" onClick={() => { setAssigning(ag._id); setPick(""); }}>
+                        <IC.Link /> Assign Seller
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+/* ═══════════════════════════════════════════════════════════════
+   FEES TAB  (seller listing fees management)
+═══════════════════════════════════════════════════════════════ */
+const FeesTab = () => {
+  const [fees, setFees]       = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter]   = useState("all");
+  const [actionId, setAct]    = useState(null);
+  const [editId, setEditId]   = useState(null);
+  const [editAmount, setEditAmount] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const q = filter !== "all" ? `?status=${filter}` : "";
+      const { data } = await API.get(`/admin/fees${q}`);
+      setFees(data.fees || []);
+    } catch { }
+    finally { setLoading(false); }
+  }, [filter]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const markPaid = async (id) => {
+    setAct(id);
+    try { await API.patch(`/admin/fees/${id}/mark-paid`); load(); }
+    catch (e) { alert(e.response?.data?.message || "Failed"); }
+    finally { setAct(null); }
+  };
+
+  const waive = async (id) => {
+    if (!confirm("Waive this fee?")) return;
+    setAct(id);
+    try { await API.patch(`/admin/fees/${id}/waive`); load(); }
+    catch (e) { alert(e.response?.data?.message || "Failed"); }
+    finally { setAct(null); }
+  };
+
+  const updateAmount = async (id) => {
+    setAct(id);
+    try { await API.patch(`/admin/fees/${id}`, { amount: Number(editAmount) }); setEditId(null); load(); }
+    catch (e) { alert(e.response?.data?.message || "Failed"); }
+    finally { setAct(null); }
+  };
+
+  const totalCollected = fees.filter(f => f.status === "paid").reduce((a, f) => a + (f.amount || 0), 0);
+  const totalPending   = fees.filter(f => f.status === "unpaid").reduce((a, f) => a + (f.amount || 0), 0);
+
+  return (
+    <div className="tab-body">
+      <div className="tab-head">
+        <h2 className="tab-title">Seller Fees</h2>
+        <p className="tab-sub">Charge and track fees for sellers who list properties on NestFind</p>
+      </div>
+
+      <div className="stats-grid" style={{ gridTemplateColumns: "repeat(3,1fr)" }}>
+        <StatCard icon={<IC.CreditCard />} accent="#16a34a" label="Collected"     value={fmtPrice(totalCollected)} />
+        <StatCard icon={<IC.AlertCircle />} accent="#dc2626" label="Outstanding"  value={fmtPrice(totalPending)} sub={`${fees.filter(f=>f.status==="unpaid").length} unpaid`} />
+        <StatCard icon={<IC.TrendUp />}    accent="#7c3aed" label="Total Fees"    value={fees.length} sub="all time" />
+      </div>
+
+      <div className="card no-pad">
+        <div className="card-head" style={{padding:"12px 16px"}}>
+          <div className="filter-tabs" style={{marginLeft:0}}>
+            {["all","unpaid","paid","waived"].map(f => (
+              <button key={f} className={`ftab${filter===f?" on":""}`} onClick={() => setFilter(f)}>
+                {f.charAt(0).toUpperCase()+f.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {loading ? <div className="loading-state"><div className="spinner" /></div>
+        : fees.length === 0 ? <div className="empty">No fee records found</div>
+        : (
+          <div className="table-scroll">
+            <table className="data-table">
+              <thead>
+                <tr>{["Seller","Property","Amount","Status","Due Date","Actions"].map(h=><th key={h}>{h}</th>)}</tr>
+              </thead>
+              <tbody>
+                {fees.map(f => (
+                  <tr key={f._id}>
+                    <td>
+                      <div className="user-cell">
+                        <div className="u-avatar sm">{f.sellerId?.name?.charAt(0).toUpperCase()}</div>
+                        <div>
+                          <div className="cell-title">{f.sellerId?.name || "—"}</div>
+                          <div className="cell-sub">{f.sellerId?.email}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <div className="cell-title" style={{maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.propertyId?.title || "—"}</div>
+                      <div className="cell-sub">{f.feeType || "Listing Fee"}</div>
+                    </td>
+                    <td>
+                      {editId === f._id
+                        ? <div className="edit-inline">
+                            <input className="amount-input" type="number" value={editAmount} onChange={e=>setEditAmount(e.target.value)} />
+                            <button className="btn-approve sm" onClick={() => updateAmount(f._id)} disabled={actionId===f._id}><IC.Check /></button>
+                            <button className="btn-ghost sm"   onClick={() => setEditId(null)}>✕</button>
+                          </div>
+                        : <span className="price-cell" style={{cursor:"pointer"}} onClick={() => { setEditId(f._id); setEditAmount(f.amount); }}>
+                            {fmtPrice(f.amount)} <IC.Edit style={{opacity:0.4,verticalAlign:"middle"}} />
+                          </span>
+                      }
+                    </td>
+                    <td><FeePill status={f.status} /></td>
+                    <td><span className={f.status==="unpaid" && new Date(f.dueDate)<new Date() ? "overdue-text" : ""}>{fmtDate(f.dueDate)}</span></td>
+                    <td>
+                      <div className="row-actions">
+                        {f.status === "unpaid" && <>
+                          <button className="btn-approve sm" onClick={() => markPaid(f._id)} disabled={actionId===f._id}><IC.Check /> Mark Paid</button>
+                          <button className="btn-ghost sm"   onClick={() => waive(f._id)}    disabled={actionId===f._id}>Waive</button>
+                        </>}
+                        {f.status === "paid"   && <span className="na-text">Settled</span>}
+                        {f.status === "waived" && <span className="na-text">Waived</span>}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+/* ═══════════════════════════════════════════════════════════════
+   MAIN ADMIN DASHBOARD
+═══════════════════════════════════════════════════════════════ */
+export default function AdminDashboard() {
+  const { user, logout }    = useContext(AuthContext);
+  const navigate            = useNavigate();
+  const [tab, setTab]       = useState("overview");
+  const [stats, setStats]   = useState(null);
+  const [pending, setPend]  = useState([]);
+  const [loadId, setLoadId] = useState(null);
+
+  // ✅ FIX: defined before useEffect, stable reference with useCallback
+  const fetchAll = useCallback(async () => {
+    try {
+      const [st, pd] = await Promise.all([
+        API.get("/admin/stats"),
+        API.get("/admin/properties?approved=false"),
+      ]);
+      setStats(st.data);
+      setPend(pd.data.properties || []);
+    } catch (e) {
+      console.error("fetchAll error:", e);
+    }
+  }, []); // empty deps = stable, no infinite loop
+
+  useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  const handleApprove = async (id) => {
+    setLoadId(id);
+    try { await API.patch(`/admin/properties/${id}/approve`); fetchAll(); }
+    catch (e) { alert(e.response?.data?.message || "Failed"); }
+    finally { setLoadId(null); }
+  };
+
+  const handleReject = async (id) => {
+    setLoadId(id);
+    try { await API.patch(`/admin/properties/${id}/reject`); fetchAll(); }
+    catch (e) { alert(e.response?.data?.message || "Failed"); }
+    finally { setLoadId(null); }
+  };
+
+  const handleDeleteProp = async (id) => {
+    try { await API.delete(`/admin/properties/${id}`); fetchAll(); }
+    catch (e) { alert(e.response?.data?.message || "Failed"); }
+  };
+
+  const badgeCounts = {
+    overview:   pending.length,
+    properties: stats?.properties?.pending ?? 0,
+    fees:       stats?.fees?.unpaid ?? 0,
+  };
+
+  return (
+    <div className="admin-layout">
+      <Sidebar tab={tab} setTab={setTab} user={user} badgeCounts={badgeCounts} onLogout={async () => { await logout(); navigate("/auth/login"); }} />
+
+      <main className="admin-main">
+        <div className="topbar">
+          <div>
+            <h1 className="topbar-title">Admin Dashboard</h1>
+            <p className="topbar-sub">Full control over NestFind · Logged in as <strong>{user?.name}</strong></p>
+          </div>
+          {(stats?.properties?.pending > 0 || stats?.fees?.unpaid > 0) && (
+            <div className="topbar-alerts">
+              {stats?.properties?.pending > 0 && (
+                <div className="alert-chip amber">
+                  <IC.AlertCircle /> {stats.properties.pending} listing{stats.properties.pending !== 1 ? "s" : ""} pending
+                </div>
+              )}
+              {stats?.fees?.unpaid > 0 && (
+                <div className="alert-chip red">
+                  <IC.DollarSign /> {stats.fees.unpaid} unpaid fee{stats.fees.unpaid !== 1 ? "s" : ""}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {tab === "overview"   && <OverviewTab stats={stats} pending={pending} onApprove={handleApprove} onReject={handleReject} loadingId={loadId} />}
+        {tab === "properties" && <PropertiesTab onApprove={handleApprove} onReject={handleReject} onDelete={handleDeleteProp} loadingId={loadId} />}
+        {tab === "users"      && <UsersTab />}
+        {tab === "agents"     && <AgentsTab />}
+        {tab === "fees"       && <FeesTab />}
+      </main>
+
+      {/* ─── GLOBAL STYLES ─── */}
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+          --bg:    #f1f3f6;
+          --surf:  #ffffff;
+          --bdr:   #e4e7ec;
+          --t1:    #0f172a;
+          --t2:    #475569;
+          --t3:    #94a3b8;
+          --sb:    #0d1117;
+          --sb2:   #161b22;
+          --sb-bdr:#21262d;
+          --sb-t:  #c9d1d9;
+          --sb-m:  #8b949e;
+          --acc:   #2563eb;
+          --acc2:  #dbeafe;
+          --green: #16a34a;
+          --red:   #dc2626;
+          --amber: #d97706;
+          --radius:10px;
+          --shadow:0 1px 3px rgba(0,0,0,.07),0 1px 2px rgba(0,0,0,.04);
+          --shadow-md:0 4px 12px rgba(0,0,0,.08);
+          font-family:'Plus Jakarta Sans',system-ui,sans-serif;
+        }
+
+        .admin-layout { display:flex; min-height:100vh; background:var(--bg); }
+
+        /* ── Sidebar ── */
+        .sidebar { width:232px; min-width:232px; background:var(--sb); display:flex; flex-direction:column; position:sticky; top:0; height:100vh; overflow-y:auto; border-right:1px solid var(--sb-bdr); }
+        .sb-logo { display:flex; align-items:center; gap:10px; padding:20px 18px 16px; border-bottom:1px solid var(--sb-bdr); }
+        .sb-logo-mark { width:36px;height:36px;background:var(--acc);border-radius:9px;display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0; }
+        .sb-logo-name { font-size:16px;font-weight:800;color:#fff;letter-spacing:-.3px; }
+        .sb-logo-sub { font-size:10px;font-weight:700;color:#f59e0b;letter-spacing:.08em;text-transform:uppercase; }
+        .sb-user { display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid var(--sb-bdr); }
+        .sb-avatar { width:32px;height:32px;border-radius:50%;background:var(--acc);color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0; }
+        .sb-uname { font-size:12.5px;font-weight:600;color:#e2e8f0; }
+        .sb-uemail { font-size:10.5px;color:var(--sb-m);margin-top:1px; white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px; }
+        .sb-nav { flex:1;padding:12px 10px;display:flex;flex-direction:column;gap:2px; }
+        .sb-nav-label { font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--sb-m);padding:4px 8px 6px; }
+        .sb-item { display:flex;align-items:center;gap:9px;padding:9px 10px;font-size:13px;font-weight:500;color:var(--sb-m);background:none;border:none;border-radius:7px;cursor:pointer;width:100%;text-align:left;font-family:inherit;transition:background .12s,color .12s;position:relative; }
+        .sb-item span { flex:1; }
+        .sb-item:hover { background:var(--sb2);color:var(--sb-t); }
+        .sb-item.active { background:var(--sb2);color:#fff;border:1px solid var(--sb-bdr); }
+        .sb-badge { background:#1e293b;color:#93c5fd;font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:20px; }
+        .sb-logout { margin:12px;padding:9px 14px;background:transparent;color:var(--sb-m);border:1px solid var(--sb-bdr);border-radius:8px;cursor:pointer;font-size:12.5px;font-family:inherit;font-weight:500;display:flex;align-items:center;gap:8px;transition:background .12s,color .12s; }
+        .sb-logout:hover { background:var(--sb2);color:#e2e8f0; }
+
+        /* ── Main ── */
+        .admin-main { flex:1;overflow-y:auto;min-width:0; }
+        .topbar { display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:24px 28px 20px;background:var(--surf);border-bottom:1px solid var(--bdr); }
+        .topbar-title { font-size:20px;font-weight:800;color:var(--t1);letter-spacing:-.4px; }
+        .topbar-sub { font-size:13px;color:var(--t2);margin-top:2px; }
+        .topbar-sub strong { color:var(--t1); }
+        .topbar-alerts { display:flex;gap:8px;align-items:center;flex-wrap:wrap; }
+        .alert-chip { display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:6px 12px;border-radius:8px; }
+        .alert-chip.amber { background:#fef3c7;color:#92400e;border:1px solid #fcd34d; }
+        .alert-chip.red   { background:#fee2e2;color:#991b1b;border:1px solid #fca5a5; }
+
+        /* ── Tab body ── */
+        .tab-body { padding:24px 28px;display:flex;flex-direction:column;gap:20px; }
+        .tab-head { display:flex;flex-direction:column;gap:3px; }
+        .tab-head-row { display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap; }
+        .tab-title { font-size:18px;font-weight:700;color:var(--t1);letter-spacing:-.3px; }
+        .tab-sub { font-size:13px;color:var(--t2); }
+
+        /* ── Stats ── */
+        .stats-grid { display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px; }
+        .stat-card { background:var(--surf);border:1px solid var(--bdr);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow);transition:box-shadow .2s,transform .2s;cursor:default; }
+        .stat-card:hover { box-shadow:var(--shadow-md);transform:translateY(-1px); }
+        .stat-icon-wrap { width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;margin-bottom:10px; }
+        .stat-val { font-size:26px;font-weight:800;color:var(--t1);letter-spacing:-1px;line-height:1; }
+        .stat-label { font-size:12.5px;font-weight:600;color:var(--t1);margin-top:5px; }
+        .stat-sub { font-size:11px;color:var(--t3);margin-top:2px; }
+
+        /* ── Card ── */
+        .card { background:var(--surf);border:1px solid var(--bdr);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow); }
+        .card.no-pad { padding:0;overflow:hidden; }
+        .card-head { display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--bdr); }
+        .card-title { display:flex;align-items:center;gap:7px;font-size:14px;font-weight:700;color:var(--t1); }
+        .badge-count { font-size:12px;color:var(--t3);background:var(--bg);padding:3px 10px;border-radius:20px;border:1px solid var(--bdr); }
+
+        /* ── Pending list ── */
+        .pending-list { display:flex;flex-direction:column;gap:10px; }
+        .pending-row { display:flex;align-items:center;gap:12px;padding:11px 14px;background:#fafbfd;border:1px solid var(--bdr);border-radius:9px;transition:background .12s; }
+        .pending-row:hover { background:#f1f5f9; }
+        .pending-thumb { width:46px;height:46px;border-radius:8px;background:var(--bg);overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:var(--t3);border:1px solid var(--bdr); }
+        .pending-thumb img { width:100%;height:100%;object-fit:cover; }
+        .pending-info { flex:1;min-width:0; }
+        .pending-title { font-size:13px;font-weight:600;color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+        .pending-meta { font-size:11.5px;color:var(--t3);margin-top:2px; }
+        .pending-meta strong { color:var(--t2); }
+
+        /* ── Table ── */
+        .table-scroll { overflow-x:auto; }
+        .data-table { width:100%;border-collapse:collapse;font-size:13px; }
+        .data-table th { text-align:left;padding:10px 14px;color:var(--t3);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.06em;background:#fafbfd;border-bottom:1px solid var(--bdr); }
+        .data-table td { padding:12px 14px;border-bottom:1px solid #f1f5f9;vertical-align:middle;color:var(--t2); }
+        .data-table tr:last-child td { border-bottom:none; }
+        .data-table tr:hover td { background:#fafbfd; }
+        .cell-title { font-weight:600;color:var(--t1);font-size:13px; }
+        .cell-sub { font-size:11px;color:var(--t3);margin-top:1px; }
+        .price-cell { font-weight:700;color:var(--t1);font-variant-numeric:tabular-nums; }
+        .user-cell { display:flex;align-items:center;gap:9px; }
+        .u-avatar { width:30px;height:30px;border-radius:50%;background:var(--t1);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0; }
+        .u-avatar.sm { width:26px;height:26px;font-size:11px; }
+        .na-text { font-size:12px;color:var(--t3); }
+        .overdue-text { color:var(--red);font-weight:600; }
+
+        /* ── Buttons ── */
+        .row-actions { display:flex;align-items:center;gap:6px; }
+        .row-actions.wrap { flex-wrap:wrap; }
+        .double-action { display:flex;align-items:center;gap:6px;flex-wrap:wrap; }
+
+        button { font-family:inherit; }
+
+        .btn-approve, .btn-reject, .btn-warn, .btn-ghost {
+          display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;padding:7px 13px;border-radius:7px;cursor:pointer;border:none;transition:opacity .15s,transform .1s;
+        }
+        .btn-approve { background:#d1fae5;color:#065f46; }
+        .btn-approve:hover { background:#a7f3d0; }
+        .btn-reject  { background:#fee2e2;color:#991b1b;border:1px solid #fca5a5!important; }
+        .btn-reject:hover { background:#fecaca; }
+        .btn-warn    { background:#fef3c7;color:#92400e; }
+        .btn-warn:hover { background:#fde68a; }
+        .btn-ghost   { background:var(--bg);color:var(--t2);border:1px solid var(--bdr)!important; }
+        .btn-ghost:hover { background:var(--bdr); }
+
+        .btn-approve.sm,.btn-reject.sm,.btn-warn.sm,.btn-ghost.sm { font-size:11.5px;padding:5px 10px;border-radius:6px; }
+        .btn-xs { font-size:11px;padding:3px 8px;border-radius:5px; }
+
+        button:disabled { opacity:.5;cursor:not-allowed; }
+        button:active:not(:disabled) { transform:scale(.97); }
+
+        .btn-primary-outline { display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;padding:7px 13px;border-radius:7px;cursor:pointer;background:transparent;border:1.5px solid var(--acc);color:var(--acc);transition:background .12s; }
+        .btn-primary-outline:hover { background:var(--acc2); }
+
+        /* ── Filter tabs ── */
+        .filter-tabs { display:flex;gap:6px; }
+        .ftab { padding:6px 14px;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--bdr);background:none;color:var(--t2);font-family:inherit;transition:background .12s,color .12s,border-color .12s; }
+        .ftab:hover { background:var(--bg); }
+        .ftab.on { background:var(--t1);color:#fff;border-color:var(--t1); }
+
+        /* ── Search ── */
+        .search-row { display:flex;gap:8px;align-items:center; }
+        .search-box { display:flex;align-items:center;gap:8px;border:1px solid var(--bdr);border-radius:8px;padding:7px 12px;background:var(--surf);color:var(--t3); }
+        .search-box input { border:none;outline:none;font-size:13px;font-family:inherit;color:var(--t1);width:200px;background:transparent; }
+        .sel { padding:7px 10px;border:1px solid var(--bdr);border-radius:8px;font-size:13px;font-family:inherit;background:var(--surf);color:var(--t1);cursor:pointer;outline:none; }
+        .sel.sm { font-size:11.5px;padding:4px 8px;border-radius:6px; }
+        .sel.flex1 { flex:1; }
+
+        /* ── Agent cards ── */
+        .agents-grid { display:flex;flex-direction:column;gap:16px; }
+        .agent-card { background:var(--surf);border:1px solid var(--bdr);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow); }
+        .agent-card.inactive { opacity:.65; }
+        .agent-card-head { display:flex;align-items:flex-start;gap:14px;margin-bottom:14px; }
+        .agent-avatar-lg { width:46px;height:46px;border-radius:50%;background:var(--t1);color:#fff;font-size:17px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0; }
+        .agent-info { flex:1;min-width:0; }
+        .agent-name { font-size:15px;font-weight:700;color:var(--t1); }
+        .agent-email { font-size:12px;color:var(--t2);margin-top:2px; }
+        .agent-contact { font-size:12px;color:var(--t3);margin-top:1px; }
+        .agent-card-actions { display:flex;flex-direction:column;align-items:flex-end;gap:7px;flex-shrink:0; }
+        .agent-sellers { border-top:1px solid var(--bdr);padding-top:12px;margin-top:2px;display:flex;flex-direction:column;gap:7px; }
+        .agent-sellers-label { display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px; }
+        .assigned-seller-row { display:flex;align-items:center;justify-content:space-between;background:#fafbfd;border:1px solid var(--bdr);border-radius:7px;padding:8px 10px; }
+        .agent-chip { display:flex;align-items:center;gap:8px; }
+        .agent-chip-avatar { width:26px;height:26px;border-radius:50%;background:var(--acc);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0; }
+        .assign-row { display:flex;align-items:center;gap:8px;margin-top:12px;padding-top:12px;border-top:1px dashed var(--bdr);flex-wrap:wrap; }
+
+        /* ── Inline edit ── */
+        .edit-inline { display:flex;align-items:center;gap:6px; }
+        .amount-input { padding:4px 8px;border:1px solid var(--acc);border-radius:6px;font-size:13px;font-family:inherit;outline:none;width:100px;color:var(--t1); }
+
+        /* ── States ── */
+        .loading-state { display:flex;justify-content:center;align-items:center;padding:56px; }
+        .spinner { width:24px;height:24px;border:2.5px solid var(--bdr);border-top-color:var(--acc);border-radius:50%;animation:spin .7s linear infinite; }
+        @keyframes spin { to { transform:rotate(360deg); } }
+        .empty { display:flex;align-items:center;justify-content:center;gap:10px;padding:52px;color:var(--t3);font-size:13.5px;font-weight:500; }
+
+        /* ── Responsive ── */
+        @media(max-width:900px) {
+          .stats-grid { grid-template-columns:repeat(2,1fr); }
+          .admin-main .topbar { padding:16px 18px; }
+          .tab-body { padding:18px; }
+        }
+        @media(max-width:680px) {
+          .admin-layout { flex-direction:column; }
+          .sidebar { width:100%;height:auto;position:static; }
+          .sb-nav { flex-direction:row;flex-wrap:wrap; }
+          .sb-nav-label { display:none; }
+          .stats-grid { grid-template-columns:repeat(2,1fr); }
+          .search-box input { width:140px; }
+        }
+      `}</style>
+    </div>
+  );
+}
