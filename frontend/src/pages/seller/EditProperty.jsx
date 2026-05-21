@@ -97,6 +97,22 @@ export default function EditProperty() {
     setNewImgPreviews((prev) => [...prev, ...files.map((f) => URL.createObjectURL(f))]);
   };
 
+  
+const getCoordinates = async () => {
+  try {
+    const fullAddress = `${form.address?.street}, ${form.address?.city}, ${form.address?.state}, ${form.address?.pincode}, ${form.address?.country}`;
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(fullAddress)}&format=jsonv2&limit=1`,
+      { headers: { Accept: "application/json", "User-Agent": "NestFind/1.0" } }
+    );
+    const data = await res.json();
+    if (data.length > 0) return { latitude: parseFloat(data[0].lat), longitude: parseFloat(data[0].lon) };
+    return { latitude: null, longitude: null };
+  } catch {
+    return { latitude: null, longitude: null };
+  }
+};
+
   // ── FIXED: inside component so it accesses state ──────────────────────────
   const removeNewImage = (i) => {
     setNewImages((p) => p.filter((_, idx) => idx !== i));
@@ -119,15 +135,21 @@ export default function EditProperty() {
   };
 
   // ── Submit ────────────────────────────────────────────────────────────────
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!validate()) { setActiveTab("basic"); return; }
-    setSaving(true);
-    try {
-      const fd = new FormData();
+ const handleSubmit = async (e) => {
+  e.preventDefault();
+  if (!validate()) { setActiveTab("basic"); return; }
+  setSaving(true);
+  try {
+    // AUTO-GEOCODE on edit too
+    const coords = await getCoordinates();
+    const { thumbnail: _t, images: _i, ...rest } = form;
+    const updatedForm = {
+      ...rest,
+      address: { ...rest.address, coordinates: coords },
+    };
 
-      // Strip old thumbnail/images from JSON (handled separately)
-      const { thumbnail: _t, images: _i, ...rest } = form;
+    const fd = new FormData();
+    fd.append("data", JSON.stringify(updatedForm));
       fd.append("data", JSON.stringify(rest));
 
       // New thumbnail file

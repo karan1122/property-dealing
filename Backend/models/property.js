@@ -125,8 +125,8 @@ const propertySchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["Available", "Sold", "Pending"],
-      default: "Available",
+      enum: ["Available", "Sold", "Pending", "Rejected"],
+      default: "Pending",
     },
 
     isActive: {
@@ -137,7 +137,34 @@ const propertySchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    agentVerdict: { type: String, enum: ["pending", "approved", "rejected", "needs_changes"], default: "pending" },
+    agentNote: { type: String, default: "" },
+
+
+    agentVerificationStatus: {
+      type: String,
+      enum: [
+        "pending",
+        "verified",
+        "fake",
+        "needs_changes",
+      ],
+      default: "pending",
+    },
+    verifiedAt: {
+      type: Date,
+    },
+    agentVerificationNote: {
+      type: String,
+      default: "",
+    },
+
+    verifiedByAgent: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
   },
+
   {
     timestamps: true,
     versionKey: false,

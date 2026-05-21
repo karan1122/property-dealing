@@ -95,7 +95,11 @@ const Login = () => {
             navigate(
               "/seller/dashboard"
             );
-          } else {
+          }
+          else if (res.data.user.role === "agent") {
+            navigate("/agent/dashboard");
+          }
+          else {
             navigate(
               location.state?.from
                 ?.pathname || "/",

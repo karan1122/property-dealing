@@ -32,25 +32,25 @@ exports.getStats = async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/admin/users  —  all users with filters
 // ─────────────────────────────────────────────────────────────────────────────
+// In adminController.js — getAllUsers
 exports.getAllUsers = async (req, res) => {
   try {
-    const { role, search, page = 1, limit = 20 } = req.query;
+    const { search, role } = req.query;
     const filter = {};
-    if (role)   filter.role = role;
+    if (role && role !== "all") filter.role = role;
     if (search) filter.$or = [
       { name:  { $regex: search, $options: "i" } },
       { email: { $regex: search, $options: "i" } },
     ];
 
-    const skip = (Number(page) - 1) * Number(limit);
-    const [users, total] = await Promise.all([
-      User.find(filter).select("-refreshTokens").sort({ createdAt: -1 }).skip(skip).limit(Number(limit)),
-      User.countDocuments(filter),
-    ]);
+    const users = await User.find(filter)
+      .select("-password")
+      .populate("assignedAgent", "name email contact") // ← ADD THIS
+      .sort({ createdAt: -1 });
 
-    res.json({ users, total, page: Number(page), pages: Math.ceil(total / Number(limit)) });
+    res.json({ success: true, users });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ success: false, message: err.message });
   }
 };
 
@@ -124,6 +124,7 @@ exports.getAllProperties = async (req, res) => {
     const [properties, total] = await Promise.all([
       Property.find(filter)
         .populate("userId", "name email contact role")
+.populate("verifiedByAgent", "name email")
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(Number(limit)),
@@ -139,17 +140,27 @@ exports.getAllProperties = async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // PATCH /api/admin/properties/:id/approve
 // ─────────────────────────────────────────────────────────────────────────────
-exports.approveProperty = async (req, res) => {
+// NEW
+exports.adminApproveProperty = async (req, res) => {
   try {
-    const property = await Property.findByIdAndUpdate(
-      req.params.id,
-      { isApprovedByCompany: true, status: "Available", isActive: true },
-      { new: true }
-    ).populate("userId", "name email");
-    if (!property) return res.status(404).json({ message: "Property not found" });
-    res.json({ message: "Property approved and now live", property });
+    const property = await Property.findById(req.params.id);
+    if (!property)
+      return res.status(404).json({ success: false, message: "Not found" });
+
+    // Block approval if agent hasn't approved yet
+    if (property.agentVerdict !== "approved")
+      return res.status(400).json({
+        success: false,
+        message: "Cannot approve — agent verification is still pending",
+      });
+
+    property.isApprovedByCompany = true;
+    property.status = "Available";
+    await property.save();
+
+    res.json({ success: true, property });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ success: false, message: err.message });
   }
 };
 
@@ -160,7 +171,8 @@ exports.rejectProperty = async (req, res) => {
   try {
     const property = await Property.findByIdAndUpdate(
       req.params.id,
-      { isApprovedByCompany: false, status: "Pending", isActive: false },
+    // In adminController rejectProperty:
+{ isApprovedByCompany: false, status: "Rejected", isActive: false },
       { new: true }
     );
     if (!property) return res.status(404).json({ message: "Property not found" });

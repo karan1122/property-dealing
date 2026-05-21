@@ -90,6 +90,78 @@ export default function AddProperty() {
     setImgPreviews((p) => p.filter((_, idx) => idx !== i));
   };
 
+const getCoordinates = async () => {
+
+  try {
+
+const fullAddress = `${form.address.street}, ${form.address.city}, ${form.address.state}, ${form.address.pincode}, ${form.address.country}`;
+
+
+    console.log(
+      "Searching Address:",
+      fullAddress
+    );
+
+    const url =
+`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(fullAddress)}&format=jsonv2&limit=1`;
+    console.log("API URL:", url);
+
+   const res = await fetch(url, {
+  headers: {
+    Accept: "application/json",
+    "User-Agent": "NestFind/1.0",
+  },
+});
+
+    console.log(
+      "Response Status:",
+      res.status
+    );
+
+    const data = await res.json();
+
+    console.log(
+      "Coordinates API Response:",
+      data
+    );
+
+    if (data.length > 0) {
+
+      const coords = {
+        latitude: parseFloat(data[0].lat),
+        longitude: parseFloat(data[0].lon),
+      };
+
+      console.log(
+        "Final Coordinates:",
+        coords
+      );
+
+      return coords;
+    }
+
+    console.log(
+      "No coordinates found"
+    );
+
+    return {
+      latitude: null,
+      longitude: null,
+    };
+
+  } catch (err) {
+
+    console.error(
+      "Coordinate Fetch Error:",
+      err
+    );
+
+    return {
+      latitude: null,
+      longitude: null,
+    };
+  }
+};
   const validate = () => {
     const e = {};
     if (!form.title.trim()) e.title = "Title is required";
@@ -104,23 +176,76 @@ export default function AddProperty() {
     return Object.keys(e).length === 0;
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!validate()) { setStep(1); return; }
-    setLoading(true);
-    try {
-      const fd = new FormData();
-      fd.append("data", JSON.stringify(form));
-      if (thumbnail) fd.append("thumbnail", thumbnail);
-      images.forEach((img) => fd.append("images", img));
-      await api.post("/properties", fd, { headers: { "Content-Type": "multipart/form-data" } });
-      navigate("/seller/dashboard");
-    } catch (err) {
-      alert(err?.response?.data?.message || "Failed to add property");
-    } finally {
-      setLoading(false);
+ const handleSubmit = async (e) => {
+
+  e.preventDefault();
+
+  if (!validate()) {
+    setStep(1);
+    return;
+  }
+
+  setLoading(true);
+
+  try {
+
+    // auto coordinates
+    const coords =
+      await getCoordinates();
+
+    const updatedForm = {
+      ...form,
+
+      address: {
+        ...form.address,
+
+        coordinates: coords,
+      },
+    };
+
+    const fd = new FormData();
+
+    fd.append(
+      "data",
+      JSON.stringify(updatedForm)
+    );
+
+    if (thumbnail) {
+      fd.append(
+        "thumbnail",
+        thumbnail
+      );
     }
-  };
+
+    images.forEach((img) =>
+      fd.append("images", img)
+    );
+
+    await api.post(
+      "/properties",
+      fd,
+      {
+        headers: {
+          "Content-Type":
+            "multipart/form-data"
+        }
+      }
+    );
+
+    navigate("/seller/dashboard");
+
+  } catch (err) {
+
+    alert(
+      err?.response?.data?.message ||
+      "Failed to add property"
+    );
+
+  } finally {
+
+    setLoading(false);
+  }
+};
 
   const stepOk = () => {
     if (step === 1) return form.title && form.description && form.price;

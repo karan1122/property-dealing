@@ -24,6 +24,9 @@ import Profile      from "./components/users/Profile";
 /* ── Admin ────────────────────────────────────────────────────────────────── */
 import Dashboard from "./pages/admin/Dashboard";
 
+/* ── Agent ───────────────────────────────────────────────────────────────── */
+import AgentDashboard from "./pages/agent/AgentDashboard";
+
 /* ── Seller ───────────────────────────────────────────────────────────────── */
 import SellerDashboard  from "./pages/seller/SellerDashboard";
 import AddProperty      from "./pages/seller/AddProperty";
@@ -75,6 +78,23 @@ const App = () => {
         </Route>
       </Route>
 
+{/* ── Agent only ───────────────────────────────────────────────────── */}
+
+<Route element={<ProtectedRoute user={user} />}>
+  <Route
+    element={
+      <RoleRoute
+        user={user}
+        allowedRoles={["agent"]}
+      />
+    }
+  >
+    <Route
+      path="/agent/dashboard"
+      element={<AgentDashboard />}
+    />
+  </Route>
+</Route>
       {/* ── Seller only ───────────────────────────────────────────────────── */}
       <Route element={<ProtectedRoute user={user} />}>
         <Route element={<RoleRoute user={user} allowedRoles={["seller"]} />}>

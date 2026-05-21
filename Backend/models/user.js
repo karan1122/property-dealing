@@ -1,57 +1,82 @@
 const mongoose = require("mongoose");
-const bcrypt = require("bcryptjs");
+const bcrypt   = require("bcryptjs");
 
 const userSchema = new mongoose.Schema(
   {
     name: {
-      type: String,
-      required: [true, "Name is required"],
-      trim: true,
-      minlength: [2, "Name must be at least 2 characters"],
+      type:      String,
+      required:  [true, "Name is required"],
+      trim:      true,
+      minlength: [2,  "Name must be at least 2 characters"],
       maxlength: [60, "Name too long"],
     },
 
     email: {
-      type: String,
-      required: [true, "Email is required"],
-      unique: true,
+      type:      String,
+      required:  [true, "Email is required"],
+      unique:    true,
       lowercase: true,
-      trim: true,
+      trim:      true,
     },
 
-    // ← Added: matches the contact field sent from Register.jsx
     contact: {
-      type: String,
+      type:     String,
       required: [true, "Phone number is required"],
-      match: [/^[0-9]{10}$/, "Enter a valid 10-digit phone number"],
-      trim: true,
+      match:    [/^[0-9]{10}$/, "Enter a valid 10-digit phone number"],
+      trim:     true,
     },
 
     password: {
-      type: String,
-      required: [true, "Password is required"],
+      type:      String,
+      required:  [true, "Password is required"],
       minlength: [6, "Password must be at least 6 characters"],
-      select: false,
+      select:    false,   // never returned in queries unless explicitly requested
     },
 
     role: {
-      type: String,
-      enum: ["buyer", "seller", "agent", "admin"],
+      type:    String,
+      enum:    ["buyer", "seller", "agent", "admin"],
       default: "buyer",
     },
-    assignedAgent: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      default: null,
+
+    // ── Seller fields ──────────────────────────────────────────
+    isApprovedByAdmin: {
+      type:    Boolean,
+      default: false,   // admin must approve seller before listings go live
     },
-    refreshTokens: {
-      type: [String],
-      default: [],
-      select: false,
+    agencyName: {
+      type:    String,
+      default: "",
     },
 
+    // ── Agent fields ───────────────────────────────────────────
+    specialization: {
+      type:    String,
+      enum:    ["Residential","Commercial","Luxury","Rental","Plots & Land","Industrial",""],
+      default: "",
+    },
+    bio: {
+      type:    String,
+      default: "",
+    },
+
+    // ── Seller → Agent assignment ──────────────────────────────
+    assignedAgent: {
+      type:    mongoose.Schema.Types.ObjectId,
+      ref:     "User",
+      default: null,
+    },
+
+    // ── Refresh tokens (array for multi-device) ────────────────
+    refreshTokens: {
+      type:    [String],
+      default: [],
+      select:  false,
+    },
+
+    // ── Account status ─────────────────────────────────────────
     isActive: {
-      type: Boolean,
+      type:    Boolean,
       default: true,
     },
 
@@ -59,30 +84,44 @@ const userSchema = new mongoose.Schema(
       type: Date,
     },
   },
-  { timestamps: true }
+  { timestamps: true, versionKey: false }
 );
 
-// ── Hash password before save ──────────────────────────────────────────────────
+/* ── Indexes ── */
+userSchema.index({ role: 1 });
+userSchema.index({ assignedAgent: 1 });
+
+/* ── Hash password before save ──
+   Skipped when password field was not modified (e.g. updating name/email)
+*/
 userSchema.pre("save", async function () {
   if (!this.isModified("password")) return;
-  const salt = await bcrypt.genSalt(12);
+  const salt    = await bcrypt.genSalt(12);
   this.password = await bcrypt.hash(this.password, salt);
 });
 
-// ── Compare plaintext password with hash ──────────────────────────────────────
-userSchema.methods.comparePassword = async function (candidatePassword) {
-  return bcrypt.compare(candidatePassword, this.password);
+/* ── Compare plaintext password with stored hash ── */
+userSchema.methods.comparePassword = async function (candidate) {
+  return bcrypt.compare(candidate, this.password);
 };
 
-// ── Strip sensitive fields from JSON output ────────────────────────────────────
+/* ── Safe public JSON (strips sensitive fields) ── */
 userSchema.methods.toPublicJSON = function () {
   return {
-    _id: this._id,
-    name: this.name,
-    email: this.email,
-    contact: this.contact,
-    role: this.role,
-    createdAt: this.createdAt,
+    _id:               this._id,
+    name:              this.name,
+    email:             this.email,
+    contact:           this.contact,
+    role:              this.role,
+    isApprovedByAdmin: this.isApprovedByAdmin,
+    agencyName:        this.agencyName,
+    specialization:    this.specialization,
+    bio:               this.bio,
+    assignedAgent:     this.assignedAgent,
+    isActive:          this.isActive,
+    lastLogin:         this.lastLogin,
+    createdAt:         this.createdAt,
+    updatedAt:         this.updatedAt,
   };
 };
 

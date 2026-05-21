@@ -35,6 +35,7 @@ app.use("/api/properties", propertyRoutes);
 //admin
 app.use("/api/admin", adminRoutes);
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+//seller
 
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get("/api/health", (req, res) =>

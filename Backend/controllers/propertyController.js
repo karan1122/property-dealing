@@ -69,6 +69,21 @@ const deleteFromCloudinary = async (url) => {
   }
 };
 
+// In getMyAllProperties:
+exports.getMyAllProperties = async (req, res) => {
+  try {
+    const properties = await Property.find({
+      userId: req.user.sub,
+         isActive: true,
+    })
+      .populate("userId", "name email contact assignedAgent")  // populate assignedAgent too
+      .sort({ createdAt: -1 });
+
+    res.json({ success: true, properties });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/properties   (seller — create)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -150,7 +165,9 @@ exports.updateProperty = async (req, res) => {
     formData.images = [...keptImages, ...newImageUrls];
 
     // ── Update DB — single findByIdAndUpdate, no double response ─────────
-    const updateObj = { isApprovedByCompany: false, status: "Pending" };
+    const updateObj = { isApprovedByCompany: false, status: "Pending"  , agentVerdict: "pending",  // ← reset so agent reviews again
+  agentNote: "", // ← clear previous agent note
+    };
 
     ["title", "description", "price", "address", "propertyInfo",
      "propertyDetails", "thumbnail", "images"].forEach((key) => {
@@ -295,5 +312,85 @@ exports.adminApproveProperty = async (req, res) => {
     res.json({ success: true, property });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+exports.submitAgentVerdict = async (req, res) => {
+  try {
+    const { agentVerdict, agentNote } = req.body;
+
+    if (!["approved", "rejected", "needs_changes"].includes(agentVerdict))
+      return res.status(400).json({ success: false, message: "Invalid verdict" });
+
+    const property = await Property.findById(req.params.id);
+    if (!property)
+      return res.status(404).json({ success: false, message: "Property not found" });
+
+    // Use consistent field names that AdminDashboard reads
+    property.agentVerdict      = agentVerdict;
+    property.agentNote         = agentNote;
+    property.verifiedByAgent   = req.user.sub;
+    property.verifiedAt        = new Date();
+    await property.save();
+
+    res.json({ success: true, message: "Verdict submitted", property });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+// ─────────────────────────────────────────────────────────────────────────────
+// PATCH /api/properties/:id/verify   (agent)
+// ─────────────────────────────────────────────────────────────────────────────
+
+exports.verifyProperty = async (
+  req,
+  res
+) => {
+
+  try {
+
+    const {
+      status,
+      note,
+    } = req.body;
+
+    const property =
+      await Property.findById(
+        req.params.id
+      );
+
+    if (!property) {
+
+      return res.status(404).json({
+        success: false,
+        message:
+          "Property not found",
+      });
+    }
+property.verifiedAt = new Date();
+    property.agentVerificationStatus =
+      status;
+
+    property.agentVerificationNote =
+      note;
+
+    property.verifiedByAgent =
+      req.user.sub;
+
+    await property.save();
+
+    res.json({
+      success: true,
+      message:
+        "Verification updated",
+      property,
+    });
+
+  } catch (err) {
+
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
   }
 };
