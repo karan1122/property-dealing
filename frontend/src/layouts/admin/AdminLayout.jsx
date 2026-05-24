@@ -123,6 +123,11 @@ const TABS=[
   {id:"users",     label:"Users",      Icon:IC.Users},
   {id:"agents",    label:"Agents",     Icon:IC.Agent},
   {id:"fees",      label:"Seller Fees",Icon:IC.Dollar},
+  {
+  id: "commissions",
+  label: "Commissions",
+  Icon: IC.CreditCard,
+},
 ];
 const Sidebar=({tab,setTab,user,onLogout,badgeCounts})=>(
   <aside className="sidebar">
@@ -882,7 +887,417 @@ const FeesTab=()=>{
     </div>
   );
 };
+const CommissionsTab = () => {
 
+  const [rows, setRows] =
+    useState([]);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [filter, setFilter] =
+    useState("all");
+
+  const [actionId, setActionId] =
+    useState(null);
+
+  const load = useCallback(
+    async () => {
+
+      setLoading(true);
+
+      try {
+
+        const q =
+          filter !== "all"
+            ? `?status=${filter}`
+            : "";
+
+        const { data } =
+          await API.get(
+            `/admin/commissions${q}`
+          );
+
+        setRows(
+          data.commissions || []
+        );
+
+      } catch (err) {
+
+        console.log(err);
+
+      } finally {
+
+        setLoading(false);
+      }
+    },
+    [filter]
+  );
+
+  useEffect(() => {
+
+    load();
+
+  }, [load]);
+
+  const markPaid =
+    async (id) => {
+
+      setActionId(id);
+
+      try {
+
+        await API.patch(
+          `/admin/commissions/${id}/pay`
+        );
+
+        load();
+
+      } catch (err) {
+
+        alert(
+          err.response?.data
+            ?.message ||
+            "Failed"
+        );
+
+      } finally {
+
+        setActionId(null);
+      }
+    };
+
+  const totalPaid =
+    rows
+      .filter(
+        (r) =>
+          r.status === "paid"
+      )
+      .reduce(
+        (a, r) =>
+          a + (r.amount || 0),
+        0
+      );
+
+  const totalPending =
+    rows
+      .filter(
+        (r) =>
+          r.status ===
+          "pending"
+      )
+      .reduce(
+        (a, r) =>
+          a + (r.amount || 0),
+        0
+      );
+
+  return (
+
+    <div className="tab-body">
+
+      <div className="tab-head">
+
+        <h2 className="tab-title">
+
+          Agent Commissions
+
+        </h2>
+
+        <p className="tab-sub">
+
+          Manage all agent payouts
+          and commissions
+
+        </p>
+
+      </div>
+
+      {/* Stats */}
+      <div
+        className="stats-grid"
+        style={{
+          gridTemplateColumns:
+            "repeat(3,1fr)",
+        }}
+      >
+
+        <StatCard
+          icon={<IC.CreditCard />}
+          accent="#16a34a"
+          label="Paid"
+          value={fmtPrice(
+            totalPaid
+          )}
+        />
+
+        <StatCard
+          icon={<IC.Alert />}
+          accent="#dc2626"
+          label="Pending"
+          value={fmtPrice(
+            totalPending
+          )}
+        />
+
+        <StatCard
+          icon={<IC.TrendUp />}
+          accent="#2563eb"
+          label="Total Commissions"
+          value={rows.length}
+        />
+
+      </div>
+
+      {/* Filters */}
+      <div className="filter-tabs">
+
+        {[
+          "all",
+          "pending",
+          "paid",
+        ].map((f) => (
+
+          <button
+            key={f}
+            className={`ftab ${
+              filter === f
+                ? "on"
+                : ""
+            }`}
+            onClick={() =>
+              setFilter(f)
+            }
+          >
+
+            {f}
+
+          </button>
+
+        ))}
+
+      </div>
+
+      {/* Table */}
+      <div className="card no-pad">
+
+        {loading ? (
+
+          <div className="loading-state">
+
+            <div className="spinner" />
+
+          </div>
+
+        ) : rows.length === 0 ? (
+
+          <div className="empty">
+
+            No commissions found
+
+          </div>
+
+        ) : (
+
+          <div className="table-scroll">
+
+            <table className="data-table">
+
+              <thead>
+
+                <tr>
+
+                  <th>Agent</th>
+
+                  <th>Property</th>
+
+                  <th>Seller</th>
+
+                  <th>Amount</th>
+
+                  <th>Status</th>
+
+                  <th>Date</th>
+
+                  <th>Actions</th>
+
+                </tr>
+
+              </thead>
+
+              <tbody>
+
+                {rows.map((r) => (
+
+                  <tr key={r._id}>
+
+                    {/* Agent */}
+                    <td>
+
+                      <div className="user-cell">
+
+                        <Avatar
+                          name={
+                            r.agentId
+                              ?.name
+                          }
+                          size={30}
+                        />
+
+                        <div>
+
+                          <div className="cell-title">
+
+                            {
+                              r.agentId
+                                ?.name
+                            }
+
+                          </div>
+
+                          <div className="cell-sub">
+
+                            {
+                              r.agentId
+                                ?.email
+                            }
+
+                          </div>
+
+                        </div>
+
+                      </div>
+
+                    </td>
+
+                    {/* Property */}
+                    <td>
+
+                      <div className="cell-title">
+
+                        {
+                          r.propertyId
+                            ?.title
+                        }
+
+                      </div>
+
+                    </td>
+
+                    {/* Seller */}
+                    <td>
+
+                      <div className="cell-title">
+
+                        {
+                          r.sellerId
+                            ?.name
+                        }
+
+                      </div>
+
+                    </td>
+
+                    {/* Amount */}
+                    <td>
+
+                      <span className="price-cell">
+
+                        {fmtPrice(
+                          r.amount
+                        )}
+
+                      </span>
+
+                    </td>
+
+                    {/* Status */}
+                    <td>
+
+                      {r.status ===
+                      "paid" ? (
+
+                        <Pill
+                          bg="#d1fae5"
+                          color="#065f46"
+                          dot="●"
+                        >
+
+                          Paid
+
+                        </Pill>
+
+                      ) : (
+
+                        <Pill
+                          bg="#fee2e2"
+                          color="#991b1b"
+                          dot="●"
+                        >
+
+                          Pending
+
+                        </Pill>
+
+                      )}
+
+                    </td>
+
+                    {/* Date */}
+                    <td>
+
+                      {fmtDate(
+                        r.createdAt
+                      )}
+
+                    </td>
+
+                    {/* Actions */}
+                    <td>
+
+                      {r.status !==
+                        "paid" && (
+
+                        <button
+                          className="btn-approve sm"
+                          onClick={() =>
+                            markPaid(
+                              r._id
+                            )
+                          }
+                          disabled={
+                            actionId ===
+                            r._id
+                          }
+                        >
+
+                          <IC.Check />
+
+                          Mark Paid
+
+                        </button>
+
+                      )}
+
+                    </td>
+
+                  </tr>
+
+                ))}
+
+              </tbody>
+
+            </table>
+
+          </div>
+
+        )}
+
+      </div>
+
+    </div>
+  );
+};
 /* ═══════════════════════════════════════════════════════════════
    MAIN ADMIN DASHBOARD
 ═══════════════════════════════════════════════════════════════ */

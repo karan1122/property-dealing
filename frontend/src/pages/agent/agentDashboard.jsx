@@ -103,64 +103,64 @@ function PropertyDrawer({ property: p, onClose, onVerdict }) {
           )}
 
           {/* Address — most important for agent to verify on-site */}
-        {/* Address — most important for agent to verify on-site */}
-<div className="drw-section">
+          {/* Address — most important for agent to verify on-site */}
+          <div className="drw-section">
 
-  <div className="drw-section-title">
-    <IC.MapPin /> Full Address
-  </div>
+            <div className="drw-section-title">
+              <IC.MapPin /> Full Address
+            </div>
 
-  <div className="drw-address-box">
+            <div className="drw-address-box">
 
-    <div className="drw-address-line">
-      {p.address?.street}
-    </div>
+              <div className="drw-address-line">
+                {p.address?.street}
+              </div>
 
-    <div className="drw-address-line">
-      {p.address?.city}, {p.address?.state} — {p.address?.pincode}
-    </div>
+              <div className="drw-address-line">
+                {p.address?.city}, {p.address?.state} — {p.address?.pincode}
+              </div>
 
-    <div className="drw-address-line">
-      {p.address?.country}
-    </div>
+              <div className="drw-address-line">
+                {p.address?.country}
+              </div>
 
-    <a
-      className="drw-maps-link"
-      href={
-        p.address?.coordinates?.latitude
-          ? `https://www.google.com/maps?q=${p.address.coordinates.latitude},${p.address.coordinates.longitude}`
-          : `https://www.google.com/maps/search/${encodeURIComponent(
-              `${p.address?.street}, ${p.address?.city}, ${p.address?.state}, ${p.address?.pincode}, ${p.address?.country}`
-            )}`
-      }
-      target="_blank"
-      rel="noreferrer"
-    >
-      📍 Open in Google Maps
-    </a>
+              <a
+                className="drw-maps-link"
+                href={
+                  p.address?.coordinates?.latitude
+                    ? `https://www.google.com/maps?q=${p.address.coordinates.latitude},${p.address.coordinates.longitude}`
+                    : `https://www.google.com/maps/search/${encodeURIComponent(
+                      `${p.address?.street}, ${p.address?.city}, ${p.address?.state}, ${p.address?.pincode}, ${p.address?.country}`
+                    )}`
+                }
+                target="_blank"
+                rel="noreferrer"
+              >
+                📍 Open in Google Maps
+              </a>
 
-    <iframe
-      style={{
-        width: "100%",
-        height: 200,
-        border: "none",
-        borderRadius: 9,
-        marginTop: 10,
-      }}
-      loading="lazy"
-      referrerPolicy="no-referrer-when-downgrade"
-      src={
-        p.address?.coordinates?.latitude
-          ? `https://www.google.com/maps?q=${p.address.coordinates.latitude},${p.address.coordinates.longitude}&output=embed`
-          : `https://www.google.com/maps?q=${encodeURIComponent(
-              `${p.address?.street}, ${p.address?.city}, ${p.address?.state}, ${p.address?.pincode}`
-            )}&output=embed`
-      }
-    />
+              <iframe
+                style={{
+                  width: "100%",
+                  height: 200,
+                  border: "none",
+                  borderRadius: 9,
+                  marginTop: 10,
+                }}
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+                src={
+                  p.address?.coordinates?.latitude
+                    ? `https://www.google.com/maps?q=${p.address.coordinates.latitude},${p.address.coordinates.longitude}&output=embed`
+                    : `https://www.google.com/maps?q=${encodeURIComponent(
+                      `${p.address?.street}, ${p.address?.city}, ${p.address?.state}, ${p.address?.pincode}`
+                    )}&output=embed`
+                }
+              />
 
-  </div>
+            </div>
 
-</div>
+          </div>
 
           {/* Seller info */}
           <div className="drw-section">
@@ -321,7 +321,230 @@ function VerdictModal({ property, action, onClose, onDone }) {
     </div>
   );
 }
+// ─── Drop-in replacement for the CRM tab in AgentDashboard.jsx ───────────────
+// Replace: {tab === "crm" && ( ... )} with this component render
+// Add this component above AgentDashboard export
 
+function CRMTab({ inquiries, onStatusUpdate }) {
+  const [expandedId, setExpandedId] = useState(null);
+  const [noteTarget, setNoteTarget] = useState(null);
+  const [noteText, setNoteText]     = useState("");
+  const [savingId,  setSavingId]    = useState(null);
+  const [filterStatus, setFilter]   = useState("all");
+
+  const PIPELINE = [
+    { key: "new",             label: "New",             color: "#2563eb", bg: "#dbeafe" },
+    { key: "contacted",       label: "Contacted",       color: "#7c3aed", bg: "#ede9fe" },
+    { key: "visit_scheduled", label: "Visit Scheduled", color: "#0891b2", bg: "#cffafe" },
+    { key: "negotiating",     label: "Negotiating",     color: "#d97706", bg: "#fef3c7" },
+    { key: "closed",          label: "Closed",          color: "#16a34a", bg: "#dcfce7" },
+    { key: "lost",            label: "Lost",            color: "#dc2626", bg: "#fee2e2" },
+  ];
+  const P_MAP = Object.fromEntries(PIPELINE.map(s => [s.key, s]));
+
+  const filtered = filterStatus === "all"
+    ? inquiries
+    : inquiries.filter(i => i.status === filterStatus);
+
+  const counts = { all: inquiries.length };
+  PIPELINE.forEach(s => { counts[s.key] = inquiries.filter(i => i.status === s.key).length; });
+
+  const changeStatus = async (id, status) => {
+    setSavingId(id + status);
+    await onStatusUpdate(id, status);
+    setSavingId(null);
+  };
+
+  const saveNote = async (inq) => {
+    setSavingId(inq._id + "note");
+    await onStatusUpdate(inq._id, inq.status, noteText);
+    setSavingId(null);
+    setNoteTarget(null);
+    setNoteText("");
+  };
+
+  return (
+    <div style={{ padding: "24px 28px", display: "flex", flexDirection: "column", gap: 20 }}>
+
+      {/* Pipeline summary bar */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 8 }}>
+        {PIPELINE.map(s => (
+          <div
+            key={s.key}
+            onClick={() => setFilter(f => f === s.key ? "all" : s.key)}
+            style={{
+              background: filterStatus === s.key ? s.bg : "#fff",
+              border: `1.5px solid ${filterStatus === s.key ? s.color + "60" : "#e2e8f0"}`,
+              borderTop: `3px solid ${s.color}`,
+              borderRadius: 10,
+              padding: "12px 14px",
+              cursor: "pointer",
+              transition: "all .15s",
+            }}
+          >
+            <div style={{ fontSize: 22, fontWeight: 800, color: s.color, letterSpacing: "-1px" }}>
+              {counts[s.key] || 0}
+            </div>
+            <div style={{ fontSize: 11.5, fontWeight: 600, color: "#0f172a", marginTop: 4 }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Filter pills */}
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        <button
+          onClick={() => setFilter("all")}
+          style={{ padding: "6px 14px", borderRadius: 20, fontSize: 12, fontWeight: 600, border: "1px solid", cursor: "pointer", fontFamily: "inherit", transition: "all .12s", background: filterStatus === "all" ? "#0f172a" : "none", color: filterStatus === "all" ? "#fff" : "#64748b", borderColor: filterStatus === "all" ? "#0f172a" : "#e2e8f0" }}
+        >
+          All <span style={{ fontSize: 10.5, background: filterStatus === "all" ? "rgba(255,255,255,.2)" : "#f3f4f6", padding: "1px 6px", borderRadius: 10, color: filterStatus === "all" ? "inherit" : "#94a3b8", marginLeft: 4 }}>{counts.all}</span>
+        </button>
+        {PIPELINE.map(s => (
+          <button key={s.key} onClick={() => setFilter(f => f === s.key ? "all" : s.key)}
+            style={{ padding: "6px 14px", borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", transition: "all .12s", border: `1px solid ${filterStatus === s.key ? s.color + "50" : "transparent"}`, background: filterStatus === s.key ? s.bg : "transparent", color: filterStatus === s.key ? s.color : "#64748b" }}>
+            {s.label}
+            <span style={{ fontSize: 10.5, background: "rgba(0,0,0,.08)", padding: "1px 6px", borderRadius: 10, marginLeft: 4 }}>{counts[s.key] || 0}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Inquiry cards */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {filtered.length === 0 ? (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, padding: "52px", color: "#94a3b8", fontSize: 13.5, fontWeight: 500, background: "#fff", border: "1px solid #e2e8f0", borderRadius: 10 }}>
+            No inquiries in this stage
+          </div>
+        ) : filtered.map(inq => {
+          const scfg = P_MAP[inq.status] || P_MAP.new;
+          const isExp = expandedId === inq._id;
+          return (
+            <div key={inq._id} style={{ background: "#fff", border: "1px solid #e2e8f0", borderLeft: `3px solid ${scfg.color}`, borderRadius: 10, overflow: "hidden", transition: "box-shadow .15s" }}>
+              {/* Card header */}
+              <div style={{ display: "grid", gridTemplateColumns: "auto 1fr auto", gap: 12, alignItems: "flex-start", padding: "14px 16px", cursor: "pointer" }}
+                onClick={() => setExpandedId(id => id === inq._id ? null : inq._id)}>
+                {/* Avatar */}
+                <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#e0e7ff", color: "#4338ca", fontWeight: 800, fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  {inq.buyerName?.[0]?.toUpperCase()}
+                </div>
+                {/* Info */}
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <span style={{ fontWeight: 700, fontSize: 14, color: "#0f172a" }}>{inq.buyerName}</span>
+                    <span style={{ background: scfg.bg, color: scfg.color, fontSize: 11, fontWeight: 700, padding: "2px 9px", borderRadius: 20 }}>{scfg.label}</span>
+                    {inq.status === "closed" && <span style={{ background: "#dcfce7", color: "#166534", fontSize: 10.5, fontWeight: 700, padding: "2px 8px", borderRadius: 20 }}>🏆 Sale Closed</span>}
+                  </div>
+                  <div style={{ fontSize: 12, color: "#64748b", marginTop: 3, display: "flex", gap: 12, flexWrap: "wrap" }}>
+                    {inq.buyerEmail && <span style={{ display: "flex", alignItems: "center", gap: 3 }}>✉ {inq.buyerEmail}</span>}
+                    {inq.buyerPhone && <span style={{ display: "flex", alignItems: "center", gap: 3 }}>📞 {inq.buyerPhone}</span>}
+                  </div>
+                  {inq.propertyId && (
+                    <div style={{ display: "inline-flex", alignItems: "center", gap: 5, marginTop: 6, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 7, padding: "4px 10px", fontSize: 12, fontWeight: 600, color: "#334155" }}>
+                      🏠 {inq.propertyId.title} {inq.propertyId.price && <span style={{ color: "#64748b", fontWeight: 400 }}>· ₹{Number(inq.propertyId.price).toLocaleString("en-IN")}</span>}
+                    </div>
+                  )}
+                  {inq.sellerId && (
+                    <div style={{ fontSize: 11.5, color: "#94a3b8", marginTop: 4 }}>
+                      Seller: <span style={{ fontWeight: 600, color: "#64748b" }}>{inq.sellerId.name}</span>
+                    </div>
+                  )}
+                </div>
+                {/* Right: date + chevron */}
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+                  <span style={{ fontSize: 11.5, color: "#94a3b8" }}>
+                    {new Date(inq.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
+                  </span>
+                  <span style={{ fontSize: 11, color: "#94a3b8", transform: isExp ? "rotate(180deg)" : "none", transition: "transform .2s" }}>▼</span>
+                </div>
+              </div>
+
+              {/* Message preview (collapsed) */}
+              {!isExp && (
+                <div style={{ padding: "0 16px 12px 68px", fontSize: 13, color: "#475569", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {inq.message}
+                </div>
+              )}
+
+              {/* Expanded body */}
+              {isExp && (
+                <div style={{ padding: "0 16px 16px 16px", borderTop: "1px solid #f1f5f9" }}>
+                  {/* Full message */}
+                  <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: "12px 14px", fontSize: 13.5, color: "#334155", lineHeight: 1.65, marginTop: 12, whiteSpace: "pre-wrap" }}>
+                    {inq.message}
+                  </div>
+
+                  {/* Agent note */}
+                  {inq.agentNote && noteTarget?._id !== inq._id && (
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: 6, marginTop: 10, background: "#fffbeb", border: "1px solid #fcd34d", borderRadius: 8, padding: "8px 12px" }}>
+                      <span style={{ fontSize: 13 }}>📝</span>
+                      <span style={{ fontSize: 12.5, color: "#78350f", lineHeight: 1.5 }}>{inq.agentNote}</span>
+                    </div>
+                  )}
+
+                  {/* Note editor */}
+                  {noteTarget?._id === inq._id && (
+                    <div style={{ marginTop: 10 }}>
+                      <textarea
+                        autoFocus
+                        value={noteText}
+                        onChange={e => setNoteText(e.target.value)}
+                        placeholder="Add a note about this inquiry…"
+                        rows={3}
+                        style={{ width: "100%", border: "1.5px solid #3b82f6", borderRadius: 8, padding: "10px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", resize: "vertical" }}
+                      />
+                      <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                        <button disabled={savingId === inq._id + "note"} onClick={() => saveNote(inq)}
+                          style={{ padding: "7px 16px", background: "#0f172a", color: "#fff", border: "none", borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+                          {savingId === inq._id + "note" ? "Saving…" : "Save Note"}
+                        </button>
+                        <button onClick={() => { setNoteTarget(null); setNoteText(""); }}
+                          style={{ padding: "7px 12px", background: "none", color: "#64748b", border: "1px solid #e2e8f0", borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Actions row */}
+                  <div style={{ marginTop: 14, borderTop: "1px solid #f1f5f9", paddingTop: 12 }}>
+                    <p style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".06em", color: "#94a3b8", marginBottom: 8 }}>Move to stage</p>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      {PIPELINE.filter(s => s.key !== inq.status).map(s => (
+                        <button key={s.key} disabled={!!savingId} onClick={() => changeStatus(inq._id, s.key)}
+                          style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", background: s.bg, color: s.color, border: `1px solid ${s.color}30`, borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", opacity: savingId === inq._id + s.key ? 0.6 : 1 }}>
+                          {savingId === inq._id + s.key ? "…" : s.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Contact + Note buttons */}
+                    <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+                      {inq.buyerEmail && (
+                        <a href={`mailto:${inq.buyerEmail}?subject=Re: ${inq.propertyId?.title || "Property Inquiry"}`}
+                          style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "7px 14px", border: "1px solid #bfdbfe", borderRadius: 8, fontSize: 12.5, fontWeight: 600, background: "#eff6ff", color: "#1d4ed8", textDecoration: "none" }}>
+                          ✉ Reply
+                        </a>
+                      )}
+                      {inq.buyerPhone && (
+                        <a href={`tel:${inq.buyerPhone}`}
+                          style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "7px 14px", border: "1px solid #bbf7d0", borderRadius: 8, fontSize: 12.5, fontWeight: 600, background: "#f0fdf4", color: "#15803d", textDecoration: "none" }}>
+                          📞 Call
+                        </a>
+                      )}
+                      <button
+                        onClick={() => { setNoteTarget(inq); setNoteText(inq.agentNote || ""); }}
+                        style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "7px 14px", border: "1px solid #e2e8f0", borderRadius: 8, fontSize: 12.5, fontWeight: 600, background: "#fff", color: "#334155", cursor: "pointer", fontFamily: "inherit" }}>
+                        📝 {inq.agentNote ? "Edit Note" : "Add Note"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 export default function AgentDashboard() {
   const { user, logout } = useAuth();
@@ -336,40 +559,154 @@ export default function AgentDashboard() {
   const [search, setSearch] = useState("");
   const [drawer, setDrawer] = useState(null); // property for detail view
   const [modal, setModal] = useState(null); // { property, action }
+  const [inquiries, setInquiries] = useState([]);
+  const [commissions, setCommissions] = useState([]);
 
   const stats = {
-    approved: properties.filter(p => p.agentVerdict === "approved").length,
-    pending: properties.filter(p => !p.agentVerdict || p.agentVerdict === "pending").length,
-    rejected: properties.filter(p => p.agentVerdict === "rejected").length,
-    changes: properties.filter(p => p.agentVerdict === "needs_changes").length,
+    sellers: sellers.length,
+    properties: properties.length,
+
+    approved: properties.filter(
+      (p) => p.agentVerdict === "approved"
+    ).length,
+
+    pending: properties.filter(
+      (p) =>
+        !p.agentVerdict ||
+        p.agentVerdict === "pending"
+    ).length,
+
+    rejected: properties.filter(
+      (p) => p.agentVerdict === "rejected"
+    ).length,
+
+    changes: properties.filter(
+      (p) => p.agentVerdict === "needs_changes"
+    ).length,
+
+    totalInquiries:
+      inquiries?.length || 0,
+
+    newInquiries:
+      inquiries?.filter(
+        (i) => i.status === "new"
+      ).length || 0,
+
+    closedDeals:
+      inquiries?.filter(
+        (i) => i.status === "closed"
+      ).length || 0,
+
+    commissionsEarned:
+      commissions
+        ?.filter(
+          (c) => c.status === "paid"
+        )
+        .reduce(
+          (s, c) => s + c.amount,
+          0
+        ) || 0,
   };
 
-  const fetchData = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true); else setRefreshing(true);
-    try {
-      const meRes = await api.get("/auth/me");
-      const agentId = meRes.data.user._id;
-      const [sellerRes, propRes] = await Promise.all([
-        api.get(`/admin/agents/${agentId}/sellers`),
-        api.get(`/admin/agents/${agentId}/properties`),
-      ]);
-      setSellers(sellerRes.data.sellers || []);
-      setProperties(propRes.data.properties || []);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false); setRefreshing(false);
-    }
-  }, []);
+const fetchData = useCallback(
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  async (silent = false) => {
+
+    if (!silent)
+      setLoading(true);
+    else
+      setRefreshing(true);
+
+    try {
+
+      const meRes =
+        await api.get(
+          "/auth/me"
+        );
+
+      const agentId =
+        meRes.data.user._id;
+
+      const [
+        sellerRes,
+        propRes,
+        inquiryRes,
+        commRes,
+      ] = await Promise.all([
+
+        api.get(
+          `/admin/agents/${agentId}/sellers`
+        ),
+
+        api.get(
+          `/admin/agents/${agentId}/properties`
+        ),
+
+        api.get(
+          "/inquiries/my"
+        ),
+
+        api.get(
+          "/inquiries/commissions"
+        ),
+
+      ]);
+
+      setSellers(
+        sellerRes.data
+          .sellers || []
+      );
+
+      setProperties(
+        propRes.data
+          .properties || []
+      );
+
+      setInquiries(
+        inquiryRes.data
+          .inquiries || []
+      );
+
+      setCommissions(
+        commRes.data
+          .commissions || []
+      );
+
+    } catch (err) {
+
+      console.error(err);
+
+    } finally {
+
+      setLoading(false);
+
+      setRefreshing(false);
+    }
+  },
+
+  []
+);
+
+useEffect(() => {
+
+  fetchData();
+
+}, [fetchData]);
 
   // When agent clicks a verdict button inside the drawer
   const handleDrawerVerdict = (property, action) => {
     setDrawer(null);
     setModal({ property, action });
   };
-
+const handleInquiryStatus = async (id, status, agentNote) => {
+  try {
+    const res = await api.patch(`/inquiries/${id}/status`, { status, agentNote });
+    setInquiries(prev => prev.map(i => i._id === id ? res.data.inquiry : i));
+    if (status === "closed") fetchData(true); // refresh commissions
+  } catch (err) {
+    alert(err?.response?.data?.message || "Failed");
+  }
+};
   const filteredProps = properties.filter(p => {
     const vs = p.agentVerdict || "pending";
 
@@ -389,6 +726,7 @@ export default function AgentDashboard() {
   const TABS = [
     { id: "overview", label: "Overview", Icon: IC.Home },
     { id: "properties", label: "Properties", Icon: IC.Building },
+    { id: "crm", label: "CRM", Icon: IC.Users },
     { id: "sellers", label: "Sellers", Icon: IC.Users },
   ];
 
@@ -455,92 +793,19 @@ export default function AgentDashboard() {
         ) : (
           <>
             {/* ── OVERVIEW ── */}
-            {tab === "overview" && (
-              <div className="ag-tab-body">
-                <FlowBanner />
-                <div className="ag-stats-grid">
-                  {[
-                    { label: "Assigned Sellers", value: stats.sellers, accent: "#2563eb", emoji: "👥", sub: "total assigned" },
-                    { label: "Total Properties", value: stats.properties, accent: "#7c3aed", emoji: "🏢", sub: "across all sellers" },
-                    { label: "Pending Review", value: stats.pending, accent: "#d97706", emoji: "⏳", sub: "awaiting your action" },
-                    { label: "Approved", value: stats.approved, accent: "#16a34a", emoji: "✅", sub: "sent to admin queue" },
-                    { label: "Rejected", value: stats.rejected, accent: "#dc2626", emoji: "🚫", sub: "flagged invalid" },
-                    { label: "Needs Changes", value: stats.changes, accent: "#ea580c", emoji: "✏️", sub: "sent back to seller" },
-                  ].map(s => (
-                    <div key={s.label} className="ag-stat-card" style={{ borderTopColor: s.accent }}>
-                      <div className="ag-stat-emoji">{s.emoji}</div>
-                      <div className="ag-stat-val" style={{ color: s.accent }}>{s.value}</div>
-                      <div className="ag-stat-label">{s.label}</div>
-                      <div className="ag-stat-sub">{s.sub}</div>
-                    </div>
-                  ))}
-                </div>
+          {/* ── OVERVIEW ── */}
+{tab === "overview" && (
+  <div className="ag-tab-body">
+    <FlowBanner />
+    {/* stats, pending queue, sellers preview */}
+  </div>
+)}
 
-                {/* Pending queue */}
-                <div className="ag-card">
-                  <div className="ag-card-head">
-                    <h2 className="ag-card-title">⏳ Pending Your Verification</h2>
-                    <button className="ag-view-all" onClick={() => { setTab("properties"); setPropFilter("pending"); }}>View all →</button>
-                  </div>
-                  {stats.pending === 0 ? (
-                    <div className="ag-empty"><span style={{ fontSize: 28 }}>🎉</span><span>All caught up!</span></div>
-                  ) : (
-                    <div className="ag-pending-list">
-                      {properties
-                        .filter(p => !p.agentVerdict || p.agentVerdict === "pending")
+{/* ── CRM ── (separate, not inside overview!) */}
+{tab === "crm" && (
+  <CRMTab inquiries={inquiries} onStatusUpdate={handleInquiryStatus} />
+)}
 
-                        .slice(0, 5)
-                        .map(p => (
-                          <div key={p._id} className="ag-pending-row">
-                            <div className="ag-pending-thumb" onClick={() => setDrawer(p)} style={{ cursor: "pointer" }}>
-                              {p.thumbnail ? <img src={p.thumbnail} alt="" /> : <IC.Building />}
-                            </div>
-                            <div className="ag-pending-info" style={{ cursor: "pointer" }} onClick={() => setDrawer(p)}>
-                              <div className="ag-pending-title">{p.title}</div>
-                              <div className="ag-pending-meta">
-                                <IC.MapPin /> {p.address?.street}, {p.address?.city}, {p.address?.state} — {p.address?.pincode}
-                              </div>
-                              <div className="ag-pending-meta" style={{ marginTop: 2 }}>
-                                {fmtPrice(p.price)} · {p.propertyInfo?.propertyType}
-                                {p.userId?.name && <> · <strong>{p.userId.name}</strong> ({p.userId?.contact})</>}
-                              </div>
-                            </div>
-                            <div className="ag-pending-actions">
-                              <button className="ag-vbtn ag-vbtn-eye" onClick={() => setDrawer(p)}><IC.Eye /> View</button>
-                              <button className="ag-vbtn ag-vbtn-green" onClick={() => setModal({ property: p, action: "approved" })}><IC.Check /></button>
-                              <button className="ag-vbtn ag-vbtn-orange" onClick={() => setModal({ property: p, action: "needs_changes" })}><IC.Edit /></button>
-                              <button className="ag-vbtn ag-vbtn-red" onClick={() => setModal({ property: p, action: "rejected" })}><IC.X /></button>
-                            </div>
-                          </div>
-                        ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Sellers */}
-                <div className="ag-card">
-                  <div className="ag-card-head">
-                    <h2 className="ag-card-title">Your Sellers</h2>
-                    <button className="ag-view-all" onClick={() => setTab("sellers")}>View all →</button>
-                  </div>
-                  {sellers.length === 0 ? (
-                    <div className="ag-empty"><span>No sellers assigned yet</span></div>
-                  ) : (
-                    <div className="ag-seller-chips">
-                      {sellers.map(s => (
-                        <div key={s._id} className="ag-seller-chip">
-                          <div className="ag-seller-chip-av" style={{ background: avatarBg(s.name) }}>{s.name?.charAt(0).toUpperCase()}</div>
-                          <div>
-                            <div className="ag-seller-chip-name">{s.name}</div>
-                            <div className="ag-seller-chip-count">{s.propertyCount ?? 0} properties</div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
 
             {/* ── PROPERTIES ── */}
             {tab === "properties" && (
@@ -712,186 +977,186 @@ export default function AgentDashboard() {
       )}
 
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-        *{box-sizing:border-box;margin:0;padding:0}
-        :root{
-          --bg:#f1f5f9;--surf:#fff;--bdr:#e2e8f0;
-          --t1:#0f172a;--t2:#475569;--t3:#94a3b8;
-          --sb:#0d1117;--sb2:#161b22;--sb-bdr:#21262d;--sb-m:#8b949e;
-          --blue:#2563eb;--green:#16a34a;--red:#dc2626;--orange:#ea580c;--amber:#d97706;
-          --r:10px;--shadow:0 1px 3px rgba(0,0,0,.07),0 1px 2px rgba(0,0,0,.04);--shadow-md:0 4px 12px rgba(0,0,0,.08);
-          font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:var(--t1);
-        }
-        .ag-layout{display:flex;min-height:100vh;background:var(--bg)}
-        /* Sidebar */
-        .ag-sidebar{width:240px;min-width:240px;background:var(--sb);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto;border-right:1px solid var(--sb-bdr)}
-        .ag-sb-logo{display:flex;align-items:center;gap:10px;padding:20px 18px 16px;border-bottom:1px solid var(--sb-bdr)}
-        .ag-sb-logo-icon{width:38px;height:38px;border-radius:10px;background:var(--blue);display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0}
-        .ag-sb-logo-name{font-size:16px;font-weight:800;color:#fff;letter-spacing:-.3px}
-        .ag-sb-logo-sub{font-size:10px;font-weight:700;color:#f59e0b;letter-spacing:.08em;text-transform:uppercase}
-        .ag-sb-profile{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--sb-bdr)}
-        .ag-sb-av{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#fff;flex-shrink:0}
-        .ag-sb-name{font-size:13px;font-weight:600;color:#e2e8f0}.ag-sb-role{font-size:11px;color:var(--sb-m);margin-top:1px}
-        .ag-sb-nav{flex:1;padding:14px 10px;display:flex;flex-direction:column;gap:2px}
-        .ag-sb-nav-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--sb-m);padding:4px 8px 6px}
-        .ag-sb-item{display:flex;align-items:center;gap:9px;padding:9px 10px;font-size:13px;font-weight:500;color:var(--sb-m);background:none;border:none;border-radius:7px;cursor:pointer;width:100%;text-align:left;font-family:inherit;transition:background .12s,color .12s}
-        .ag-sb-item span{flex:1}.ag-sb-item:hover{background:var(--sb2);color:#c9d1d9}.ag-sb-item.active{background:var(--sb2);color:#fff;border:1px solid var(--sb-bdr)}
-        .ag-sb-badge{background:#7f1d1d;color:#fca5a5;font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:20px}
-        .ag-sb-logout{margin:12px;padding:10px 14px;background:transparent;color:var(--sb-m);border:1px solid var(--sb-bdr);border-radius:8px;cursor:pointer;font-size:13px;font-family:inherit;font-weight:500;display:flex;align-items:center;gap:8px;transition:background .12s,color .12s}
-        .ag-sb-logout:hover{background:#1c1c1c;color:#e2e8f0}
-        /* Main */
-        .ag-main{flex:1;overflow-y:auto;min-width:0;display:flex;flex-direction:column}
-        .ag-topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:22px 28px 18px;background:var(--surf);border-bottom:1px solid var(--bdr)}
-        .ag-topbar-title{font-size:20px;font-weight:800;color:var(--t1);letter-spacing:-.4px}
-        .ag-topbar-sub{font-size:13px;color:var(--t2);margin-top:2px}
-        .ag-topbar-right{display:flex;align-items:center;gap:10px}
-        .ag-topbar-email{font-size:12.5px;color:var(--t3);background:#f8fafc;border:1px solid var(--bdr);padding:6px 12px;border-radius:8px}
-        .ag-refresh-btn{width:34px;height:34px;border:1px solid var(--bdr);background:var(--surf);border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--t3);transition:background .12s,color .12s}
-        .ag-refresh-btn:hover{background:var(--bg);color:var(--t1)}.ag-refresh-btn.spinning svg{animation:ag-spin .8s linear infinite}
-        @keyframes ag-spin{to{transform:rotate(360deg)}}
-        .ag-tab-body{padding:24px 28px;display:flex;flex-direction:column;gap:20px}
-        /* Flow Banner */
-        .flow-banner{display:flex;align-items:center;gap:6px;flex-wrap:wrap;background:var(--surf);border:1px solid var(--bdr);border-radius:var(--r);padding:12px 18px}
-        .flow-item{display:flex;align-items:center;gap:6px}
-        .flow-step{display:inline-flex;align-items:center;gap:7px;padding:5px 13px;border-radius:20px;font-size:12px}
-        .flow-you{font-size:10px;font-weight:700;background:rgba(217,119,6,.18);color:#92400e;padding:2px 7px;border-radius:10px;margin-left:4px}
-        .flow-arr{font-size:14px;color:var(--t3);font-weight:700}
-        /* Stats */
-        .ag-stats-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:12px}
-        .ag-stat-card{background:var(--surf);border:1px solid var(--bdr);border-top:3px solid;border-radius:var(--r);padding:16px 14px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:3px}
-        .ag-stat-emoji{font-size:22px;margin-bottom:6px}.ag-stat-val{font-size:28px;font-weight:800;letter-spacing:-1px;line-height:1}
-        .ag-stat-label{font-size:12.5px;font-weight:600;color:var(--t1);margin-top:4px}.ag-stat-sub{font-size:11px;color:var(--t3)}
-        /* Card */
-        .ag-card{background:var(--surf);border:1px solid var(--bdr);border-radius:var(--r);overflow:hidden;box-shadow:var(--shadow)}.ag-card.no-pad{padding:0}
-        .ag-card-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--bdr)}
-        .ag-card-title{font-size:14.5px;font-weight:700;color:var(--t1)}
-        .ag-view-all{font-size:12.5px;color:var(--blue);font-weight:600;background:none;border:none;cursor:pointer;font-family:inherit}.ag-view-all:hover{opacity:.7}
-        /* Pending */
-        .ag-pending-list{display:flex;flex-direction:column;gap:8px;padding:12px}
-        .ag-pending-row{display:flex;align-items:flex-start;gap:12px;padding:12px;background:#fafbfd;border:1px solid var(--bdr);border-radius:9px;transition:background .12s}.ag-pending-row:hover{background:#f1f5f9}
-        .ag-pending-thumb{width:52px;height:52px;border-radius:9px;background:var(--bg);border:1px solid var(--bdr);overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:var(--t3)}.ag-pending-thumb img{width:100%;height:100%;object-fit:cover}
-        .ag-pending-info{flex:1;min-width:0}.ag-pending-title{font-size:13px;font-weight:600;color:var(--t1)}
-        .ag-pending-meta{display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--t3);margin-top:3px}.ag-pending-meta strong{color:var(--t2)}
-        .ag-pending-actions{display:flex;gap:5px;flex-shrink:0;align-items:flex-start}
-        /* Seller chips */
-        .ag-seller-chips{display:flex;flex-wrap:wrap;gap:10px;padding:14px}
-        .ag-seller-chip{display:flex;align-items:center;gap:10px;background:#fafbfd;border:1px solid var(--bdr);border-radius:9px;padding:10px 14px}
-        .ag-seller-chip-av{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;flex-shrink:0}
-        .ag-seller-chip-name{font-size:13px;font-weight:600;color:var(--t1)}.ag-seller-chip-count{font-size:11px;color:var(--t3);margin-top:1px}
-        /* Toolbar */
-        .ag-toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-        .ag-search-box{display:flex;align-items:center;gap:8px;border:1.5px solid var(--bdr);border-radius:9px;padding:8px 12px;background:var(--surf);color:var(--t3);min-width:240px}
-        .ag-search-box input{border:none;outline:none;font-size:13px;font-family:inherit;color:var(--t1);background:transparent;flex:1}
-        .ag-filter-pills{display:flex;gap:5px;flex-wrap:wrap}
-        .ag-fpill{padding:6px 13px;border-radius:20px;font-size:12px;font-weight:600;border:1px solid var(--bdr);background:none;color:var(--t2);cursor:pointer;font-family:inherit;transition:background .12s;display:flex;align-items:center;gap:5px}
-        .ag-fpill:hover{background:#f8fafc}.ag-fpill.on{background:var(--t1);color:#fff;border-color:var(--t1)}
-        .ag-fpill-cnt{font-size:10.5px;background:rgba(255,255,255,.25);padding:1px 6px;border-radius:10px}.ag-fpill:not(.on) .ag-fpill-cnt{background:#f3f4f6;color:var(--t3)}
-        /* Table */
-        .ag-table-scroll{overflow-x:auto}.ag-table{width:100%;border-collapse:collapse;font-size:13px}
-        .ag-table th{text-align:left;padding:10px 14px;font-size:10.5px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;background:#fafbfd;border-bottom:1px solid var(--bdr)}
-        .ag-table td{padding:11px 14px;border-bottom:1px solid #f1f5f9;vertical-align:middle;color:var(--t2)}
-        .ag-table tr:last-child td{border-bottom:none}.ag-table tr:hover td{background:#f8fafc}
-        .ag-prop-cell{display:flex;align-items:center;gap:10px}
-        .ag-prop-thumb{width:38px;height:38px;border-radius:7px;background:var(--bg);border:1px solid var(--bdr);overflow:hidden;display:flex;align-items:center;justify-content:center;color:var(--t3);flex-shrink:0}.ag-prop-thumb img{width:100%;height:100%;object-fit:cover}
-        .ag-prop-title{font-size:13px;font-weight:600;color:var(--t1)}.ag-prop-date{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--t3);margin-top:2px}
-        .ag-seller-cell{display:flex;align-items:center;gap:8px}
-        .ag-seller-av{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0}
-        .ag-cell-name{font-size:12.5px;font-weight:600;color:var(--t1)}.ag-cell-sub{font-size:11px;color:var(--t3);margin-top:1px}
-        .ag-price{font-weight:700;color:var(--t1)!important}
-        .ag-status-pill{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;padding:4px 10px;border-radius:20px;white-space:nowrap}
-        .ag-na{color:var(--t3);font-size:12px}.ag-action-row{display:flex;gap:4px}
-        /* Buttons */
-        .ag-vbtn{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;padding:6px 11px;border-radius:7px;border:none;cursor:pointer;font-family:inherit;transition:opacity .15s,transform .1s;white-space:nowrap}
-        .ag-vbtn.sm{padding:5px 8px;font-size:12px}.ag-vbtn:active:not(:disabled){transform:scale(.97)}
-        .ag-vbtn-green{background:#d1fae5;color:#065f46}.ag-vbtn-green:hover{background:#a7f3d0}
-        .ag-vbtn-red{background:#fee2e2;color:#991b1b}.ag-vbtn-red:hover{background:#fecaca}
-        .ag-vbtn-orange{background:#ffedd5;color:#7c2d12}.ag-vbtn-orange:hover{background:#fed7aa}
-        .ag-vbtn-eye{background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe}.ag-vbtn-eye:hover{background:#dbeafe}
-        /* Sellers grid */
-        .ag-sellers-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
-        .ag-seller-card{background:var(--surf);border:1px solid var(--bdr);border-radius:12px;padding:18px;box-shadow:var(--shadow);transition:box-shadow .2s,transform .2s}.ag-seller-card:hover{box-shadow:var(--shadow-md);transform:translateY(-2px)}
-        .ag-seller-card-head{display:flex;align-items:center;gap:12px;margin-bottom:12px}
-        .ag-seller-card-av{width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:#fff;flex-shrink:0}
-        .ag-seller-card-name{font-size:14px;font-weight:700;color:var(--t1)}.ag-seller-card-email{font-size:11.5px;color:var(--t3);margin-top:1px}
-        .ag-seller-card-contact{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--t2);margin-bottom:12px}
-        .ag-seller-card-stats{display:flex;align-items:center;background:#fafbfd;border:1px solid var(--bdr);border-radius:9px;overflow:hidden;margin-bottom:10px}
-        .ag-sc-stat{flex:1;text-align:center;padding:10px 8px}.ag-sc-val{font-size:18px;font-weight:800;color:var(--t1);letter-spacing:-.5px}
-        .ag-sc-label{font-size:10px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-top:2px}
-        .ag-sc-div{width:1px;background:var(--bdr);align-self:stretch}.ag-seller-card-joined{font-size:11px;color:var(--t3)}
-        /* Loading */
-        .ag-full-load{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;flex:1;padding:80px;color:var(--t3);font-size:13.5px}
-        .ag-spinner-lg{width:36px;height:36px;border:3px solid var(--bdr);border-top-color:var(--blue);border-radius:50%;animation:ag-spin .7s linear infinite}
-        .ag-empty{display:flex;align-items:center;justify-content:center;gap:10px;padding:40px;color:var(--t3);font-size:13.5px;font-weight:500}
+          @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+          *{box-sizing:border-box;margin:0;padding:0}
+          :root{
+            --bg:#f1f5f9;--surf:#fff;--bdr:#e2e8f0;
+            --t1:#0f172a;--t2:#475569;--t3:#94a3b8;
+            --sb:#0d1117;--sb2:#161b22;--sb-bdr:#21262d;--sb-m:#8b949e;
+            --blue:#2563eb;--green:#16a34a;--red:#dc2626;--orange:#ea580c;--amber:#d97706;
+            --r:10px;--shadow:0 1px 3px rgba(0,0,0,.07),0 1px 2px rgba(0,0,0,.04);--shadow-md:0 4px 12px rgba(0,0,0,.08);
+            font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:var(--t1);
+          }
+          .ag-layout{display:flex;min-height:100vh;background:var(--bg)}
+          /* Sidebar */
+          .ag-sidebar{width:240px;min-width:240px;background:var(--sb);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto;border-right:1px solid var(--sb-bdr)}
+          .ag-sb-logo{display:flex;align-items:center;gap:10px;padding:20px 18px 16px;border-bottom:1px solid var(--sb-bdr)}
+          .ag-sb-logo-icon{width:38px;height:38px;border-radius:10px;background:var(--blue);display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0}
+          .ag-sb-logo-name{font-size:16px;font-weight:800;color:#fff;letter-spacing:-.3px}
+          .ag-sb-logo-sub{font-size:10px;font-weight:700;color:#f59e0b;letter-spacing:.08em;text-transform:uppercase}
+          .ag-sb-profile{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--sb-bdr)}
+          .ag-sb-av{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#fff;flex-shrink:0}
+          .ag-sb-name{font-size:13px;font-weight:600;color:#e2e8f0}.ag-sb-role{font-size:11px;color:var(--sb-m);margin-top:1px}
+          .ag-sb-nav{flex:1;padding:14px 10px;display:flex;flex-direction:column;gap:2px}
+          .ag-sb-nav-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--sb-m);padding:4px 8px 6px}
+          .ag-sb-item{display:flex;align-items:center;gap:9px;padding:9px 10px;font-size:13px;font-weight:500;color:var(--sb-m);background:none;border:none;border-radius:7px;cursor:pointer;width:100%;text-align:left;font-family:inherit;transition:background .12s,color .12s}
+          .ag-sb-item span{flex:1}.ag-sb-item:hover{background:var(--sb2);color:#c9d1d9}.ag-sb-item.active{background:var(--sb2);color:#fff;border:1px solid var(--sb-bdr)}
+          .ag-sb-badge{background:#7f1d1d;color:#fca5a5;font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:20px}
+          .ag-sb-logout{margin:12px;padding:10px 14px;background:transparent;color:var(--sb-m);border:1px solid var(--sb-bdr);border-radius:8px;cursor:pointer;font-size:13px;font-family:inherit;font-weight:500;display:flex;align-items:center;gap:8px;transition:background .12s,color .12s}
+          .ag-sb-logout:hover{background:#1c1c1c;color:#e2e8f0}
+          /* Main */
+          .ag-main{flex:1;overflow-y:auto;min-width:0;display:flex;flex-direction:column}
+          .ag-topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:22px 28px 18px;background:var(--surf);border-bottom:1px solid var(--bdr)}
+          .ag-topbar-title{font-size:20px;font-weight:800;color:var(--t1);letter-spacing:-.4px}
+          .ag-topbar-sub{font-size:13px;color:var(--t2);margin-top:2px}
+          .ag-topbar-right{display:flex;align-items:center;gap:10px}
+          .ag-topbar-email{font-size:12.5px;color:var(--t3);background:#f8fafc;border:1px solid var(--bdr);padding:6px 12px;border-radius:8px}
+          .ag-refresh-btn{width:34px;height:34px;border:1px solid var(--bdr);background:var(--surf);border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--t3);transition:background .12s,color .12s}
+          .ag-refresh-btn:hover{background:var(--bg);color:var(--t1)}.ag-refresh-btn.spinning svg{animation:ag-spin .8s linear infinite}
+          @keyframes ag-spin{to{transform:rotate(360deg)}}
+          .ag-tab-body{padding:24px 28px;display:flex;flex-direction:column;gap:20px}
+          /* Flow Banner */
+          .flow-banner{display:flex;align-items:center;gap:6px;flex-wrap:wrap;background:var(--surf);border:1px solid var(--bdr);border-radius:var(--r);padding:12px 18px}
+          .flow-item{display:flex;align-items:center;gap:6px}
+          .flow-step{display:inline-flex;align-items:center;gap:7px;padding:5px 13px;border-radius:20px;font-size:12px}
+          .flow-you{font-size:10px;font-weight:700;background:rgba(217,119,6,.18);color:#92400e;padding:2px 7px;border-radius:10px;margin-left:4px}
+          .flow-arr{font-size:14px;color:var(--t3);font-weight:700}
+          /* Stats */
+          .ag-stats-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:12px}
+          .ag-stat-card{background:var(--surf);border:1px solid var(--bdr);border-top:3px solid;border-radius:var(--r);padding:16px 14px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:3px}
+          .ag-stat-emoji{font-size:22px;margin-bottom:6px}.ag-stat-val{font-size:28px;font-weight:800;letter-spacing:-1px;line-height:1}
+          .ag-stat-label{font-size:12.5px;font-weight:600;color:var(--t1);margin-top:4px}.ag-stat-sub{font-size:11px;color:var(--t3)}
+          /* Card */
+          .ag-card{background:var(--surf);border:1px solid var(--bdr);border-radius:var(--r);overflow:hidden;box-shadow:var(--shadow)}.ag-card.no-pad{padding:0}
+          .ag-card-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--bdr)}
+          .ag-card-title{font-size:14.5px;font-weight:700;color:var(--t1)}
+          .ag-view-all{font-size:12.5px;color:var(--blue);font-weight:600;background:none;border:none;cursor:pointer;font-family:inherit}.ag-view-all:hover{opacity:.7}
+          /* Pending */
+          .ag-pending-list{display:flex;flex-direction:column;gap:8px;padding:12px}
+          .ag-pending-row{display:flex;align-items:flex-start;gap:12px;padding:12px;background:#fafbfd;border:1px solid var(--bdr);border-radius:9px;transition:background .12s}.ag-pending-row:hover{background:#f1f5f9}
+          .ag-pending-thumb{width:52px;height:52px;border-radius:9px;background:var(--bg);border:1px solid var(--bdr);overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:var(--t3)}.ag-pending-thumb img{width:100%;height:100%;object-fit:cover}
+          .ag-pending-info{flex:1;min-width:0}.ag-pending-title{font-size:13px;font-weight:600;color:var(--t1)}
+          .ag-pending-meta{display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--t3);margin-top:3px}.ag-pending-meta strong{color:var(--t2)}
+          .ag-pending-actions{display:flex;gap:5px;flex-shrink:0;align-items:flex-start}
+          /* Seller chips */
+          .ag-seller-chips{display:flex;flex-wrap:wrap;gap:10px;padding:14px}
+          .ag-seller-chip{display:flex;align-items:center;gap:10px;background:#fafbfd;border:1px solid var(--bdr);border-radius:9px;padding:10px 14px}
+          .ag-seller-chip-av{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;flex-shrink:0}
+          .ag-seller-chip-name{font-size:13px;font-weight:600;color:var(--t1)}.ag-seller-chip-count{font-size:11px;color:var(--t3);margin-top:1px}
+          /* Toolbar */
+          .ag-toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+          .ag-search-box{display:flex;align-items:center;gap:8px;border:1.5px solid var(--bdr);border-radius:9px;padding:8px 12px;background:var(--surf);color:var(--t3);min-width:240px}
+          .ag-search-box input{border:none;outline:none;font-size:13px;font-family:inherit;color:var(--t1);background:transparent;flex:1}
+          .ag-filter-pills{display:flex;gap:5px;flex-wrap:wrap}
+          .ag-fpill{padding:6px 13px;border-radius:20px;font-size:12px;font-weight:600;border:1px solid var(--bdr);background:none;color:var(--t2);cursor:pointer;font-family:inherit;transition:background .12s;display:flex;align-items:center;gap:5px}
+          .ag-fpill:hover{background:#f8fafc}.ag-fpill.on{background:var(--t1);color:#fff;border-color:var(--t1)}
+          .ag-fpill-cnt{font-size:10.5px;background:rgba(255,255,255,.25);padding:1px 6px;border-radius:10px}.ag-fpill:not(.on) .ag-fpill-cnt{background:#f3f4f6;color:var(--t3)}
+          /* Table */
+          .ag-table-scroll{overflow-x:auto}.ag-table{width:100%;border-collapse:collapse;font-size:13px}
+          .ag-table th{text-align:left;padding:10px 14px;font-size:10.5px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;background:#fafbfd;border-bottom:1px solid var(--bdr)}
+          .ag-table td{padding:11px 14px;border-bottom:1px solid #f1f5f9;vertical-align:middle;color:var(--t2)}
+          .ag-table tr:last-child td{border-bottom:none}.ag-table tr:hover td{background:#f8fafc}
+          .ag-prop-cell{display:flex;align-items:center;gap:10px}
+          .ag-prop-thumb{width:38px;height:38px;border-radius:7px;background:var(--bg);border:1px solid var(--bdr);overflow:hidden;display:flex;align-items:center;justify-content:center;color:var(--t3);flex-shrink:0}.ag-prop-thumb img{width:100%;height:100%;object-fit:cover}
+          .ag-prop-title{font-size:13px;font-weight:600;color:var(--t1)}.ag-prop-date{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--t3);margin-top:2px}
+          .ag-seller-cell{display:flex;align-items:center;gap:8px}
+          .ag-seller-av{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0}
+          .ag-cell-name{font-size:12.5px;font-weight:600;color:var(--t1)}.ag-cell-sub{font-size:11px;color:var(--t3);margin-top:1px}
+          .ag-price{font-weight:700;color:var(--t1)!important}
+          .ag-status-pill{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;padding:4px 10px;border-radius:20px;white-space:nowrap}
+          .ag-na{color:var(--t3);font-size:12px}.ag-action-row{display:flex;gap:4px}
+          /* Buttons */
+          .ag-vbtn{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;padding:6px 11px;border-radius:7px;border:none;cursor:pointer;font-family:inherit;transition:opacity .15s,transform .1s;white-space:nowrap}
+          .ag-vbtn.sm{padding:5px 8px;font-size:12px}.ag-vbtn:active:not(:disabled){transform:scale(.97)}
+          .ag-vbtn-green{background:#d1fae5;color:#065f46}.ag-vbtn-green:hover{background:#a7f3d0}
+          .ag-vbtn-red{background:#fee2e2;color:#991b1b}.ag-vbtn-red:hover{background:#fecaca}
+          .ag-vbtn-orange{background:#ffedd5;color:#7c2d12}.ag-vbtn-orange:hover{background:#fed7aa}
+          .ag-vbtn-eye{background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe}.ag-vbtn-eye:hover{background:#dbeafe}
+          /* Sellers grid */
+          .ag-sellers-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+          .ag-seller-card{background:var(--surf);border:1px solid var(--bdr);border-radius:12px;padding:18px;box-shadow:var(--shadow);transition:box-shadow .2s,transform .2s}.ag-seller-card:hover{box-shadow:var(--shadow-md);transform:translateY(-2px)}
+          .ag-seller-card-head{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+          .ag-seller-card-av{width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:#fff;flex-shrink:0}
+          .ag-seller-card-name{font-size:14px;font-weight:700;color:var(--t1)}.ag-seller-card-email{font-size:11.5px;color:var(--t3);margin-top:1px}
+          .ag-seller-card-contact{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--t2);margin-bottom:12px}
+          .ag-seller-card-stats{display:flex;align-items:center;background:#fafbfd;border:1px solid var(--bdr);border-radius:9px;overflow:hidden;margin-bottom:10px}
+          .ag-sc-stat{flex:1;text-align:center;padding:10px 8px}.ag-sc-val{font-size:18px;font-weight:800;color:var(--t1);letter-spacing:-.5px}
+          .ag-sc-label{font-size:10px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-top:2px}
+          .ag-sc-div{width:1px;background:var(--bdr);align-self:stretch}.ag-seller-card-joined{font-size:11px;color:var(--t3)}
+          /* Loading */
+          .ag-full-load{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;flex:1;padding:80px;color:var(--t3);font-size:13.5px}
+          .ag-spinner-lg{width:36px;height:36px;border:3px solid var(--bdr);border-top-color:var(--blue);border-radius:50%;animation:ag-spin .7s linear infinite}
+          .ag-empty{display:flex;align-items:center;justify-content:center;gap:10px;padding:40px;color:var(--t3);font-size:13.5px;font-weight:500}
 
-        /* ══ Property Detail Drawer ══ */
-        .drw-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.5);backdrop-filter:blur(3px);z-index:1000;display:flex;justify-content:flex-end}
-        .drw{width:100%;max-width:520px;background:#fff;height:100vh;display:flex;flex-direction:column;box-shadow:-8px 0 40px rgba(0,0,0,.15);animation:drw-in .25s cubic-bezier(.16,1,.3,1)}
-        @keyframes drw-in{from{transform:translateX(100%)}to{transform:translateX(0)}}
-        .drw-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:18px 20px;border-bottom:1px solid var(--bdr);background:linear-gradient(135deg,#f8fafc,#f1f5f9)}
-        .drw-title{font-size:16px;font-weight:800;color:var(--t1);letter-spacing:-.3px}
-        .drw-subtitle{font-size:12.5px;color:var(--t2);margin-top:3px}
-        .drw-close{width:32px;height:32px;border-radius:8px;border:1px solid var(--bdr);background:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--t3);transition:background .12s;flex-shrink:0}.drw-close:hover{background:#f1f5f9;color:var(--t1)}
-        .drw-body{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:18px}
-        /* Gallery */
-        .drw-gallery{display:flex;flex-direction:column;gap:8px}
-        .drw-main-img{width:100%;height:220px;object-fit:cover;border-radius:10px;border:1px solid var(--bdr)}
-        .drw-thumbs{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px}
-        .drw-thumb{width:60px;height:48px;object-fit:cover;border-radius:7px;border:2px solid transparent;cursor:pointer;flex-shrink:0;transition:border-color .12s}
-        .drw-thumb.active{border-color:var(--blue)}
-        /* Sections */
-        .drw-section{display:flex;flex-direction:column;gap:8px}
-        .drw-section-title{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--t3);padding-bottom:6px;border-bottom:1px solid #f1f5f9}
-        .drw-address-box{background:#f8fafc;border:1px solid var(--bdr);border-radius:9px;padding:12px 14px;display:flex;flex-direction:column;gap:3px}
-        .drw-address-line{font-size:13.5px;color:var(--t1);font-weight:500}
-        .drw-maps-link{display:inline-flex;align-items:center;gap:5px;margin-top:6px;font-size:12px;color:var(--blue);font-weight:600;text-decoration:none}.drw-maps-link:hover{text-decoration:underline}
-        .drw-info-grid{display:flex;flex-direction:column;gap:6px}
-        .drw-info-row{display:flex;align-items:center;justify-content:space-between;padding:7px 12px;background:#fafbfd;border-radius:8px;border:1px solid #f1f5f9}
-        .drw-info-label{font-size:11.5px;color:var(--t3);font-weight:600}
-        .drw-info-val{font-size:13px;color:var(--t1);font-weight:600}.drw-info-val a{color:var(--blue);text-decoration:none}.drw-info-val a:hover{text-decoration:underline}
-        .drw-chips{display:flex;flex-wrap:wrap;gap:6px}
-        .drw-chip{display:inline-flex;align-items:center;gap:5px;background:#f1f5f9;border:1px solid var(--bdr);border-radius:20px;padding:4px 11px;font-size:12px;font-weight:600;color:var(--t2)}
-        .drw-desc{font-size:13px;color:var(--t2);line-height:1.6;background:#fafbfd;border:1px solid var(--bdr);border-radius:9px;padding:10px 14px}
-        .drw-prev-note{font-size:13px;color:#92400e;background:#fef3c7;border:1px solid #fcd34d;border-radius:9px;padding:10px 14px;line-height:1.5}
-        /* Drawer footer */
-        .drw-foot{padding:14px 20px;border-top:1px solid var(--bdr);background:#fafbfd;display:flex;flex-direction:column;gap:10px}
-        .drw-foot-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--t3)}
-        .drw-verdict-row{display:flex;gap:8px}
-        .drw-vbtn{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:6px;font-size:13px;font-weight:700;padding:10px 14px;border-radius:9px;border:none;cursor:pointer;font-family:inherit;transition:opacity .15s,transform .1s}
-        .drw-vbtn:active{transform:scale(.97)}
-        .drw-vbtn-green{background:#16a34a;color:#fff}.drw-vbtn-green:hover{background:#15803d}
-        .drw-vbtn-orange{background:#ea580c;color:#fff}.drw-vbtn-orange:hover{background:#c2410c}
-        .drw-vbtn-red{background:#dc2626;color:#fff}.drw-vbtn-red:hover{background:#b91c1c}
+          /* ══ Property Detail Drawer ══ */
+          .drw-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.5);backdrop-filter:blur(3px);z-index:1000;display:flex;justify-content:flex-end}
+          .drw{width:100%;max-width:520px;background:#fff;height:100vh;display:flex;flex-direction:column;box-shadow:-8px 0 40px rgba(0,0,0,.15);animation:drw-in .25s cubic-bezier(.16,1,.3,1)}
+          @keyframes drw-in{from{transform:translateX(100%)}to{transform:translateX(0)}}
+          .drw-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:18px 20px;border-bottom:1px solid var(--bdr);background:linear-gradient(135deg,#f8fafc,#f1f5f9)}
+          .drw-title{font-size:16px;font-weight:800;color:var(--t1);letter-spacing:-.3px}
+          .drw-subtitle{font-size:12.5px;color:var(--t2);margin-top:3px}
+          .drw-close{width:32px;height:32px;border-radius:8px;border:1px solid var(--bdr);background:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--t3);transition:background .12s;flex-shrink:0}.drw-close:hover{background:#f1f5f9;color:var(--t1)}
+          .drw-body{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:18px}
+          /* Gallery */
+          .drw-gallery{display:flex;flex-direction:column;gap:8px}
+          .drw-main-img{width:100%;height:220px;object-fit:cover;border-radius:10px;border:1px solid var(--bdr)}
+          .drw-thumbs{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px}
+          .drw-thumb{width:60px;height:48px;object-fit:cover;border-radius:7px;border:2px solid transparent;cursor:pointer;flex-shrink:0;transition:border-color .12s}
+          .drw-thumb.active{border-color:var(--blue)}
+          /* Sections */
+          .drw-section{display:flex;flex-direction:column;gap:8px}
+          .drw-section-title{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--t3);padding-bottom:6px;border-bottom:1px solid #f1f5f9}
+          .drw-address-box{background:#f8fafc;border:1px solid var(--bdr);border-radius:9px;padding:12px 14px;display:flex;flex-direction:column;gap:3px}
+          .drw-address-line{font-size:13.5px;color:var(--t1);font-weight:500}
+          .drw-maps-link{display:inline-flex;align-items:center;gap:5px;margin-top:6px;font-size:12px;color:var(--blue);font-weight:600;text-decoration:none}.drw-maps-link:hover{text-decoration:underline}
+          .drw-info-grid{display:flex;flex-direction:column;gap:6px}
+          .drw-info-row{display:flex;align-items:center;justify-content:space-between;padding:7px 12px;background:#fafbfd;border-radius:8px;border:1px solid #f1f5f9}
+          .drw-info-label{font-size:11.5px;color:var(--t3);font-weight:600}
+          .drw-info-val{font-size:13px;color:var(--t1);font-weight:600}.drw-info-val a{color:var(--blue);text-decoration:none}.drw-info-val a:hover{text-decoration:underline}
+          .drw-chips{display:flex;flex-wrap:wrap;gap:6px}
+          .drw-chip{display:inline-flex;align-items:center;gap:5px;background:#f1f5f9;border:1px solid var(--bdr);border-radius:20px;padding:4px 11px;font-size:12px;font-weight:600;color:var(--t2)}
+          .drw-desc{font-size:13px;color:var(--t2);line-height:1.6;background:#fafbfd;border:1px solid var(--bdr);border-radius:9px;padding:10px 14px}
+          .drw-prev-note{font-size:13px;color:#92400e;background:#fef3c7;border:1px solid #fcd34d;border-radius:9px;padding:10px 14px;line-height:1.5}
+          /* Drawer footer */
+          .drw-foot{padding:14px 20px;border-top:1px solid var(--bdr);background:#fafbfd;display:flex;flex-direction:column;gap:10px}
+          .drw-foot-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--t3)}
+          .drw-verdict-row{display:flex;gap:8px}
+          .drw-vbtn{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:6px;font-size:13px;font-weight:700;padding:10px 14px;border-radius:9px;border:none;cursor:pointer;font-family:inherit;transition:opacity .15s,transform .1s}
+          .drw-vbtn:active{transform:scale(.97)}
+          .drw-vbtn-green{background:#16a34a;color:#fff}.drw-vbtn-green:hover{background:#15803d}
+          .drw-vbtn-orange{background:#ea580c;color:#fff}.drw-vbtn-orange:hover{background:#c2410c}
+          .drw-vbtn-red{background:#dc2626;color:#fff}.drw-vbtn-red:hover{background:#b91c1c}
 
-        /* ══ Verdict Modal ══ */
-        .vm-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.55);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;z-index:1100;padding:20px}
-        .vm-box{background:#fff;border-radius:14px;width:100%;max-width:460px;box-shadow:0 20px 60px rgba(0,0,0,.22);display:flex;flex-direction:column;animation:vm-in .2s cubic-bezier(.16,1,.3,1)}
-        @keyframes vm-in{from{opacity:0;transform:scale(.95) translateY(8px)}to{opacity:1;transform:scale(1) translateY(0)}}
-        .vm-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:20px 20px 16px;border-bottom:1px solid var(--bdr)}
-        .vm-title{font-size:15px;font-weight:700;color:var(--t1)}.vm-sub{font-size:12.5px;color:var(--t3);margin-top:2px}
-        .vm-close{width:30px;height:30px;border-radius:7px;border:1px solid var(--bdr);background:none;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--t3);font-family:inherit}.vm-close:hover{background:#f8fafc;color:var(--t1)}
-        .vm-flow-note{margin:12px 20px 0;padding:10px 14px;border-radius:8px;font-size:12.5px;font-weight:500;background:#f8fafc;border:1px solid var(--bdr);color:var(--t2)}
-        .vm-body{padding:14px 20px 18px;display:flex;flex-direction:column;gap:8px}
-        .vm-label{font-size:12px;font-weight:600;color:var(--t2)}
-        .vm-textarea{padding:10px 12px;border:1.5px solid var(--bdr);border-radius:9px;font-size:13px;font-family:inherit;color:var(--t1);resize:vertical;outline:none;transition:border-color .15s}
-        .vm-textarea:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
-        .vm-hint{font-size:11px;color:var(--t3)}
-        .vm-foot{display:flex;justify-content:flex-end;gap:8px;padding:14px 20px;border-top:1px solid var(--bdr)}
-        .vm-btn-ghost{padding:8px 16px;border-radius:8px;border:1.5px solid var(--bdr);background:none;font-size:13px;font-weight:600;color:var(--t2);cursor:pointer;font-family:inherit}.vm-btn-ghost:hover{background:#f8fafc}
-        .vm-btn-submit{display:inline-flex;align-items:center;gap:7px;padding:8px 18px;border-radius:8px;border:none;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:opacity .15s}
-        .vm-btn-submit:disabled{opacity:.5;cursor:not-allowed}
-        .vm-btn-green{background:#16a34a;color:#fff}.vm-btn-green:hover:not(:disabled){background:#15803d}
-        .vm-btn-red{background:#dc2626;color:#fff}.vm-btn-red:hover:not(:disabled){background:#b91c1c}
-        .vm-btn-orange{background:#ea580c;color:#fff}.vm-btn-orange:hover:not(:disabled){background:#c2410c}
-        .vm-spinner{width:13px;height:13px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:ag-spin .6s linear infinite}
+          /* ══ Verdict Modal ══ */
+          .vm-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.55);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;z-index:1100;padding:20px}
+          .vm-box{background:#fff;border-radius:14px;width:100%;max-width:460px;box-shadow:0 20px 60px rgba(0,0,0,.22);display:flex;flex-direction:column;animation:vm-in .2s cubic-bezier(.16,1,.3,1)}
+          @keyframes vm-in{from{opacity:0;transform:scale(.95) translateY(8px)}to{opacity:1;transform:scale(1) translateY(0)}}
+          .vm-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:20px 20px 16px;border-bottom:1px solid var(--bdr)}
+          .vm-title{font-size:15px;font-weight:700;color:var(--t1)}.vm-sub{font-size:12.5px;color:var(--t3);margin-top:2px}
+          .vm-close{width:30px;height:30px;border-radius:7px;border:1px solid var(--bdr);background:none;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--t3);font-family:inherit}.vm-close:hover{background:#f8fafc;color:var(--t1)}
+          .vm-flow-note{margin:12px 20px 0;padding:10px 14px;border-radius:8px;font-size:12.5px;font-weight:500;background:#f8fafc;border:1px solid var(--bdr);color:var(--t2)}
+          .vm-body{padding:14px 20px 18px;display:flex;flex-direction:column;gap:8px}
+          .vm-label{font-size:12px;font-weight:600;color:var(--t2)}
+          .vm-textarea{padding:10px 12px;border:1.5px solid var(--bdr);border-radius:9px;font-size:13px;font-family:inherit;color:var(--t1);resize:vertical;outline:none;transition:border-color .15s}
+          .vm-textarea:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+          .vm-hint{font-size:11px;color:var(--t3)}
+          .vm-foot{display:flex;justify-content:flex-end;gap:8px;padding:14px 20px;border-top:1px solid var(--bdr)}
+          .vm-btn-ghost{padding:8px 16px;border-radius:8px;border:1.5px solid var(--bdr);background:none;font-size:13px;font-weight:600;color:var(--t2);cursor:pointer;font-family:inherit}.vm-btn-ghost:hover{background:#f8fafc}
+          .vm-btn-submit{display:inline-flex;align-items:center;gap:7px;padding:8px 18px;border-radius:8px;border:none;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:opacity .15s}
+          .vm-btn-submit:disabled{opacity:.5;cursor:not-allowed}
+          .vm-btn-green{background:#16a34a;color:#fff}.vm-btn-green:hover:not(:disabled){background:#15803d}
+          .vm-btn-red{background:#dc2626;color:#fff}.vm-btn-red:hover:not(:disabled){background:#b91c1c}
+          .vm-btn-orange{background:#ea580c;color:#fff}.vm-btn-orange:hover:not(:disabled){background:#c2410c}
+          .vm-spinner{width:13px;height:13px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:ag-spin .6s linear infinite}
 
-        @media(max-width:1100px){.ag-stats-grid{grid-template-columns:repeat(3,1fr)}}
-        @media(max-width:768px){
-          .ag-layout{flex-direction:column}.ag-sidebar{width:100%;height:auto;position:static}
-          .ag-tab-body{padding:16px}.ag-stats-grid{grid-template-columns:repeat(2,1fr)}
-          .ag-sellers-grid{grid-template-columns:1fr}.ag-toolbar{flex-direction:column;align-items:flex-start}
-          .ag-search-box{min-width:unset;width:100%}.drw{max-width:100%}
-        }
-      `}</style>
+          @media(max-width:1100px){.ag-stats-grid{grid-template-columns:repeat(3,1fr)}}
+          @media(max-width:768px){
+            .ag-layout{flex-direction:column}.ag-sidebar{width:100%;height:auto;position:static}
+            .ag-tab-body{padding:16px}.ag-stats-grid{grid-template-columns:repeat(2,1fr)}
+            .ag-sellers-grid{grid-template-columns:1fr}.ag-toolbar{flex-direction:column;align-items:flex-start}
+            .ag-search-box{min-width:unset;width:100%}.drw{max-width:100%}
+          }
+        `}</style>
     </div>
   );
 }

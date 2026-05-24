@@ -8,6 +8,7 @@ const authRoutes = require("./routes/authRoutes");
 const listingRoutes = require("./routes/listingRoutes");
 const propertyRoutes = require("./routes/propertyRoutes");
 const adminRoutes = require("./routes/adminRoutes");
+
 const path = require("path");
 
 const app = express();
@@ -35,6 +36,9 @@ app.use("/api/properties", propertyRoutes);
 //admin
 app.use("/api/admin", adminRoutes);
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
+app.use("/api/inquiries", require("./routes/inquiryRoutes"));
+app.use("/api/meetings",  require("./routes/meetingRoutes"));
 //seller
 
 // ── Health check ──────────────────────────────────────────────────────────────

@@ -17,6 +17,7 @@ const protect = (req, res, next) => {
     const decoded = verifyAccessToken(token); // throws if invalid/expired
 
     req.user = decoded; // { sub: userId, role, iat, exp }
+    // console.log(`Authenticated user ${req.user.sub} with role ${req.user.role}`);
     next();
   } catch (err) {
     if (err.name === "TokenExpiredError") {

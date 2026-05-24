@@ -11,7 +11,7 @@ export const USER_ROUTE = {
   HOME: "/",
   ABOUT: "/about",
   PROPERTY_LIST: "/properties",
-  PROPERTY: "/property",
+  PROPERTY: "/property/:id",
   CONTACT_US: "/contact",
   PROFILE: "/profile",
 };
