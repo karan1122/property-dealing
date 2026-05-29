@@ -133,7 +133,7 @@ const Sidebar=({tab,setTab,user,onLogout,badgeCounts})=>(
   <aside className="sidebar">
     <div className="sb-logo">
       <div className="sb-logo-mark"><IC.Home /></div>
-      <div><div className="sb-logo-name">NestFind</div><div className="sb-logo-sub">Admin Panel</div></div>
+      <div><div className="sb-logo-name">Crestovia</div><div className="sb-logo-sub">Admin Panel</div></div>
     </div>
     <div className="sb-user">
       <div className="sb-avatar">{user?.name?.charAt(0).toUpperCase()}</div>
@@ -185,7 +185,7 @@ const OverviewTab=({stats,pending,onApprove,onReject,loadingId})=>{
     <div className="tab-body">
       <div className="tab-head">
         <h2 className="tab-title">Site Overview</h2>
-        <p className="tab-sub">Real-time snapshot of NestFind platform activity</p>
+        <p className="tab-sub">Real-time snapshot of Crestovia platform activity</p>
       </div>
 
       <FlowBanner />
@@ -472,7 +472,7 @@ const AgentFormModal = ({ agent, onClose, onSaved }) => {
               <label className="mfield-label">Email Address *</label>
               <div className="minput-icon-wrap">
                 <IC.Mail/>
-                <input className={`minput icon-input${errors.email?" merr":""}`} type="email" value={form.email} onChange={e=>set("email",e.target.value)} placeholder="agent@nestfind.com" />
+                <input className={`minput icon-input${errors.email?" merr":""}`} type="email" value={form.email} onChange={e=>set("email",e.target.value)} placeholder="agent@Crestovia.com" />
               </div>
               {errors.email && <span className="mfield-err">{errors.email}</span>}
             </div>
@@ -838,463 +838,831 @@ const AgentsTab=()=>{
 /* ═══════════════════════════════════════════════════════════════
    FEES TAB
 ═══════════════════════════════════════════════════════════════ */
-const FeesTab=()=>{
-  const [fees,setFees]=useState([]);
-  const [loading,setLoading]=useState(true);
-  const [filter,setFilter]=useState("all");
-  const [actionId,setAct]=useState(null);
-  const [editId,setEditId]=useState(null);
-  const [editAmt,setEditAmt]=useState("");
-  const load=useCallback(async()=>{setLoading(true);try{const q=filter!=="all"?`?status=${filter}`:"";const{data}=await API.get(`/admin/fees${q}`);setFees(data.fees||[]);}catch{}finally{setLoading(false);};},[filter]);
-  useEffect(()=>{load();},[load]);
-  const markPaid=async(id)=>{setAct(id);try{await API.patch(`/admin/fees/${id}/mark-paid`);load();}catch(e){alert(e.response?.data?.message||"Failed");}finally{setAct(null);};};
-  const waive   =async(id)=>{if(!window.confirm("Waive?"))return;setAct(id);try{await API.patch(`/admin/fees/${id}/waive`);load();}catch(e){alert(e.response?.data?.message||"Failed");}finally{setAct(null);};};
-  const updAmt  =async(id)=>{setAct(id);try{await API.patch(`/admin/fees/${id}`,{amount:Number(editAmt)});setEditId(null);load();}catch(e){alert(e.response?.data?.message||"Failed");}finally{setAct(null);};};
-  const totalC=fees.filter(f=>f.status==="paid").reduce((a,f)=>a+(f.amount||0),0);
-  const totalP=fees.filter(f=>f.status==="unpaid").reduce((a,f)=>a+(f.amount||0),0);
-  return(
-    <div className="tab-body">
-      <div className="tab-head"><h2 className="tab-title">Seller Fees</h2><p className="tab-sub">Charge and track fees for sellers listing on NestFind</p></div>
-      <div className="stats-grid" style={{gridTemplateColumns:"repeat(3,1fr)"}}>
-        <StatCard icon={<IC.CreditCard/>} accent="#16a34a" label="Collected"   value={fmtPrice(totalC)}/>
-        <StatCard icon={<IC.Alert/>}      accent="#dc2626" label="Outstanding" value={fmtPrice(totalP)} sub={`${fees.filter(f=>f.status==="unpaid").length} unpaid`}/>
-        <StatCard icon={<IC.TrendUp/>}    accent="#7c3aed" label="Total Fees"  value={fees.length} sub="all time"/>
-      </div>
-      <div className="card no-pad">
-        <div className="card-head" style={{padding:"12px 16px"}}>
-          <div className="filter-tabs">{["all","unpaid","paid","waived"].map(f=><button key={f} className={`ftab${filter===f?" on":""}`} onClick={()=>setFilter(f)}>{f.charAt(0).toUpperCase()+f.slice(1)}</button>)}</div>
+// ─── DROP-IN REPLACEMENT for FeesTab in AdminDashboard.jsx ───────────────────
+// Replace the entire FeesTab component (and add CreateFeeModal above it).
+// Everything else in AdminDashboard.jsx stays the same.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/* ═══════════════════════════════════════════════════════════════
+   CREATE FEE MODAL
+   Lets admin manually charge a seller (e.g. waived Razorpay case)
+═══════════════════════════════════════════════════════════════ */
+const CreateFeeModal = ({ onClose, onSaved }) => {
+  const [sellers, setSellers]   = useState([]);
+  const [props,   setProps]     = useState([]);
+  const [search,  setSearch]    = useState("");
+  const [form,    setForm]      = useState({
+    sellerId:  "",
+    propertyId: "",
+    feeType:   "Listing Fee",
+    amount:    999,
+    dueDate:   new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
+    notes:     "",
+  });
+  const [saving,  setSaving]    = useState(false);
+  const [errors,  setErrors]    = useState({});
+
+  // Load sellers on mount
+  useEffect(() => {
+    API.get("/admin/users?role=seller")
+      .then(r => setSellers(r.data.users || []))
+      .catch(() => {});
+  }, []);
+
+  // Load properties when seller changes
+  useEffect(() => {
+    if (!form.sellerId) { setProps([]); return; }
+    API.get(`/admin/properties?sellerId=${form.sellerId}`)
+      .then(r => setProps(r.data.properties || []))
+      .catch(() => {});
+  }, [form.sellerId]);
+
+  const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+  const filteredSellers = sellers.filter(s =>
+    s.name?.toLowerCase().includes(search.toLowerCase()) ||
+    s.email?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const validate = () => {
+    const e = {};
+    if (!form.sellerId)   e.sellerId = "Select a seller";
+    if (!form.amount || Number(form.amount) <= 0) e.amount = "Enter a valid amount";
+    if (!form.dueDate)    e.dueDate  = "Due date is required";
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  const handleSubmit = async () => {
+    if (!validate()) return;
+    setSaving(true);
+    try {
+      await API.post("/admin/fees", {
+        ...form,
+        amount: Number(form.amount),
+        propertyId: form.propertyId || undefined,
+      });
+      onSaved();
+      onClose();
+    } catch (e) {
+      alert(e.response?.data?.message || "Failed to create fee");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const selectedSeller = sellers.find(s => s._id === form.sellerId);
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-box modal-lg" onClick={e => e.stopPropagation()}>
+
+        {/* Head */}
+        <div className="modal-head">
+          <div>
+            <h3 className="modal-title">Create Manual Fee</h3>
+            <p className="modal-sub">Charge a seller outside of Razorpay</p>
+          </div>
+          <button className="modal-close" onClick={onClose}><IC.Close /></button>
         </div>
-        {loading?<div className="loading-state"><div className="spinner"/></div>
-        :fees.length===0?<div className="empty">No fee records found</div>
-        :<div className="table-scroll"><table className="data-table">
-          <thead><tr>{["Seller","Property","Amount","Status","Due Date","Actions"].map(h=><th key={h}>{h}</th>)}</tr></thead>
-          <tbody>{fees.map(f=>(
-            <tr key={f._id}>
-              <td><div className="user-cell"><Avatar name={f.sellerId?.name} size={26}/><div><div className="cell-title">{f.sellerId?.name||"—"}</div><div className="cell-sub">{f.sellerId?.email}</div></div></div></td>
-              <td><div className="cell-title" style={{maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.propertyId?.title||"—"}</div><div className="cell-sub">{f.feeType||"Listing Fee"}</div></td>
-              <td>{editId===f._id?<div className="edit-inline"><input className="amount-input" type="number" value={editAmt} onChange={e=>setEditAmt(e.target.value)}/><button className="btn-approve sm" onClick={()=>updAmt(f._id)} disabled={actionId===f._id}><IC.Check/></button><button className="btn-ghost sm" onClick={()=>setEditId(null)}>✕</button></div>:<span className="price-cell" style={{cursor:"pointer"}} onClick={()=>{setEditId(f._id);setEditAmt(f.amount);}}>{fmtPrice(f.amount)} <IC.Edit style={{opacity:0.4,verticalAlign:"middle"}}/></span>}</td>
-              <td><FeePill status={f.status}/></td>
-              <td><span className={f.status==="unpaid"&&new Date(f.dueDate)<new Date()?"overdue-text":""}>{fmtDate(f.dueDate)}</span></td>
-              <td><div className="row-actions">
-                {f.status==="unpaid"&&<><button className="btn-approve sm" onClick={()=>markPaid(f._id)} disabled={actionId===f._id}><IC.Check/> Mark Paid</button><button className="btn-ghost sm" onClick={()=>waive(f._id)} disabled={actionId===f._id}>Waive</button></>}
-                {f.status==="paid"&&<span className="na-text">Settled</span>}
-                {f.status==="waived"&&<span className="na-text">Waived</span>}
-              </div></td>
-            </tr>
-          ))}</tbody>
-        </table></div>}
+
+        <div className="modal-body">
+
+          {/* ── Seller picker ── */}
+          <div className="mfield">
+            <label className="mfield-label">Seller *</label>
+            {!selectedSeller ? (
+              <>
+                <div className="modal-search" style={{ marginBottom: 6 }}>
+                  <IC.Search />
+                  <input
+                    autoFocus
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    placeholder="Search sellers…"
+                  />
+                </div>
+                <div className="seller-pick-list" style={{ maxHeight: 180 }}>
+                  {filteredSellers.length === 0
+                    ? <div className="pick-empty">No sellers found</div>
+                    : filteredSellers.map(s => (
+                        <label key={s._id} className="seller-pick-row" style={{ cursor: "pointer" }}
+                          onClick={() => { set("sellerId", s._id); setSearch(""); }}>
+                          <Avatar name={s.name} size={30} />
+                          <div className="pick-info">
+                            <div className="pick-name">{s.name}</div>
+                            <div className="pick-email">{s.email}</div>
+                          </div>
+                        </label>
+                      ))
+                  }
+                </div>
+              </>
+            ) : (
+              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", background: "#eff6ff", border: "1.5px solid #bfdbfe", borderRadius: 8 }}>
+                <Avatar name={selectedSeller.name} size={30} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>{selectedSeller.name}</div>
+                  <div style={{ fontSize: 11, color: "#94a3b8" }}>{selectedSeller.email}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { set("sellerId", ""); set("propertyId", ""); }}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8", padding: 0 }}
+                >
+                  <IC.Close />
+                </button>
+              </div>
+            )}
+            {errors.sellerId && <span className="mfield-err">{errors.sellerId}</span>}
+          </div>
+
+          {/* ── Property (optional) ── */}
+          {form.sellerId && (
+            <div className="mfield">
+              <label className="mfield-label">
+                Property <span className="mfield-hint">(optional — link this fee to a listing)</span>
+              </label>
+              <select className="minput" value={form.propertyId} onChange={e => set("propertyId", e.target.value)}>
+                <option value="">— No specific property —</option>
+                {props.map(p => (
+                  <option key={p._id} value={p._id}>
+                    {p.title} · {p.address?.city}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* ── Fee details row ── */}
+          <div className="form-grid-2">
+            <div className="mfield">
+              <label className="mfield-label">Fee type</label>
+              <select className="minput" value={form.feeType} onChange={e => set("feeType", e.target.value)}>
+                {["Listing Fee", "Renewal Fee", "Premium Upgrade", "Penalty", "Other"].map(t => (
+                  <option key={t}>{t}</option>
+                ))}
+              </select>
+            </div>
+            <div className="mfield">
+              <label className="mfield-label">Amount (₹) *</label>
+              <div className="minput-icon-wrap">
+                <IC.Dollar />
+                <input
+                  type="number"
+                  min="1"
+                  className={`minput icon-input${errors.amount ? " merr" : ""}`}
+                  value={form.amount}
+                  onChange={e => set("amount", e.target.value)}
+                  placeholder="999"
+                />
+              </div>
+              {errors.amount && <span className="mfield-err">{errors.amount}</span>}
+            </div>
+          </div>
+
+          <div className="mfield">
+            <label className="mfield-label">Due date *</label>
+            <input
+              type="date"
+              className={`minput${errors.dueDate ? " merr" : ""}`}
+              value={form.dueDate}
+              onChange={e => set("dueDate", e.target.value)}
+            />
+            {errors.dueDate && <span className="mfield-err">{errors.dueDate}</span>}
+          </div>
+
+          <div className="mfield">
+            <label className="mfield-label">Notes <span className="mfield-hint">(visible to admin only)</span></label>
+            <textarea
+              className="minput"
+              rows={2}
+              value={form.notes}
+              onChange={e => set("notes", e.target.value)}
+              placeholder="Reason for this manual fee…"
+              style={{ resize: "vertical" }}
+            />
+          </div>
+
+          {/* Info box */}
+          <div className="role-info-box">
+            <IC.Alert />
+            <span>
+              This creates an <strong>unpaid</strong> fee record. The seller will not be automatically notified — send them a message separately if needed.
+            </span>
+          </div>
+
+        </div>
+
+        <div className="modal-foot">
+          <button className="btn-ghost-sm" onClick={onClose}>Cancel</button>
+          <button className="btn-primary-sm" onClick={handleSubmit} disabled={saving}>
+            {saving
+              ? <><div className="btn-spinner-sm" /> Creating…</>
+              : <><IC.CreditCard /> Create Fee</>
+            }
+          </button>
+        </div>
       </div>
     </div>
   );
 };
-const CommissionsTab = () => {
 
-  const [rows, setRows] =
-    useState([]);
-
-  const [loading, setLoading] =
-    useState(true);
-
-  const [filter, setFilter] =
-    useState("all");
-
-  const [actionId, setActionId] =
-    useState(null);
-
-  const load = useCallback(
-    async () => {
-
-      setLoading(true);
-
-      try {
-
-        const q =
-          filter !== "all"
-            ? `?status=${filter}`
-            : "";
-
-        const { data } =
-          await API.get(
-            `/admin/commissions${q}`
-          );
-
-        setRows(
-          data.commissions || []
-        );
-
-      } catch (err) {
-
-        console.log(err);
-
-      } finally {
-
-        setLoading(false);
-      }
-    },
-    [filter]
-  );
-
-  useEffect(() => {
-
-    load();
-
-  }, [load]);
-
-  const markPaid =
-    async (id) => {
-
-      setActionId(id);
-
-      try {
-
-        await API.patch(
-          `/admin/commissions/${id}/pay`
-        );
-
-        load();
-
-      } catch (err) {
-
-        alert(
-          err.response?.data
-            ?.message ||
-            "Failed"
-        );
-
-      } finally {
-
-        setActionId(null);
-      }
-    };
-
-  const totalPaid =
-    rows
-      .filter(
-        (r) =>
-          r.status === "paid"
-      )
-      .reduce(
-        (a, r) =>
-          a + (r.amount || 0),
-        0
-      );
-
-  const totalPending =
-    rows
-      .filter(
-        (r) =>
-          r.status ===
-          "pending"
-      )
-      .reduce(
-        (a, r) =>
-          a + (r.amount || 0),
-        0
-      );
+/* ═══════════════════════════════════════════════════════════════
+   FEE DETAIL DRAWER
+   Shows full fee info including Razorpay payment details
+═══════════════════════════════════════════════════════════════ */
+const FeeDrawer = ({ fee, onClose, onMarkPaid, onWaive, loading }) => {
+  const isPaid    = fee.status === "paid";
+  const isWaived  = fee.status === "waived";
+  const isOverdue = !isPaid && !isWaived && fee.dueDate && new Date(fee.dueDate) < new Date();
 
   return (
+    <div className="drawer-backdrop" onClick={onClose}>
+      <div className="drawer" onClick={e => e.stopPropagation()}>
+        <div className="drawer-head">
+          <button className="modal-close" onClick={onClose}><IC.Close /></button>
+          <h3 className="drawer-title">Fee Details</h3>
+          <FeePill status={fee.status} />
+        </div>
+        <div className="drawer-body">
 
+          {/* Seller */}
+          <div>
+            <div className="drawer-section-title"><IC.Users /> Seller</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 0" }}>
+              <Avatar name={fee.sellerId?.name} size={40} />
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "var(--t1)" }}>{fee.sellerId?.name || "—"}</div>
+                <div style={{ fontSize: 12, color: "var(--t3)", marginTop: 2 }}>{fee.sellerId?.email}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Property */}
+          {fee.propertyId && (
+            <div>
+              <div className="drawer-section-title"><IC.Building /> Property</div>
+              <div style={{ padding: "10px 0" }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--t1)" }}>{fee.propertyId?.title || "—"}</div>
+                <div style={{ fontSize: 12, color: "var(--t3)", marginTop: 2 }}>{fee.propertyId?.address?.city}</div>
+              </div>
+            </div>
+          )}
+
+          {/* Fee breakdown */}
+          <div>
+            <div className="drawer-section-title"><IC.Dollar /> Fee Breakdown</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 0, border: "1px solid var(--bdr)", borderRadius: 9, overflow: "hidden", marginTop: 8 }}>
+              {[
+                { label: "Fee type",   value: fee.feeType || "Listing Fee" },
+                { label: "Amount",     value: <span style={{ fontWeight: 700, fontSize: 15 }}>{fmtPrice(fee.amount)}</span> },
+                { label: "Due date",   value: <span className={isOverdue ? "overdue-text" : ""}>{fmtDate(fee.dueDate)}{isOverdue ? " ⚠ Overdue" : ""}</span> },
+                { label: "Created",    value: fmtDate(fee.createdAt) },
+                { label: "Source",     value: fee.razorpayPaymentId ? "Razorpay (auto)" : "Manual" },
+              ].map(({ label, value }) => (
+                <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderBottom: "1px solid #f1f5f9", fontSize: 13 }}>
+                  <span style={{ color: "var(--t3)", fontWeight: 600 }}>{label}</span>
+                  <span style={{ color: "var(--t1)" }}>{value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Razorpay info — only shown for auto-created fees */}
+          {fee.razorpayPaymentId && (
+            <div>
+              <div className="drawer-section-title"><IC.CreditCard /> Razorpay Payment</div>
+              <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 9, padding: "12px 14px", marginTop: 8, display: "flex", flexDirection: "column", gap: 8 }}>
+                {[
+                  { label: "Payment ID", value: fee.razorpayPaymentId },
+                  { label: "Order ID",   value: fee.razorpayOrderId   },
+                ].map(({ label, value }) => value && (
+                  <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 12 }}>
+                    <span style={{ color: "#065f46", fontWeight: 600, flexShrink: 0 }}>{label}</span>
+                    <span style={{ fontFamily: "monospace", fontSize: 11, color: "#047857", wordBreak: "break-all", textAlign: "right" }}>{value}</span>
+                  </div>
+                ))}
+                <Pill bg="#d1fae5" color="#065f46" dot="●">Verified via Razorpay</Pill>
+              </div>
+            </div>
+          )}
+
+          {/* Notes */}
+          {fee.notes && (
+            <div>
+              <div className="drawer-section-title"><IC.ClipboardCheck /> Notes</div>
+              <div style={{ fontSize: 13, color: "var(--t2)", background: "#fafbfd", border: "1px solid var(--bdr)", borderRadius: 8, padding: "10px 12px", marginTop: 8, lineHeight: 1.6 }}>
+                {fee.notes}
+              </div>
+            </div>
+          )}
+
+          {/* Actions */}
+          {!isPaid && !isWaived && (
+            <div style={{ display: "flex", gap: 10, paddingTop: 4 }}>
+              <button className="btn-approve" style={{ flex: 1, justifyContent: "center" }}
+                onClick={() => onMarkPaid(fee._id)} disabled={loading}>
+                <IC.Check /> Mark Paid
+              </button>
+              <button className="btn-ghost" style={{ flex: 1, justifyContent: "center" }}
+                onClick={() => onWaive(fee._id)} disabled={loading}>
+                Waive Fee
+              </button>
+            </div>
+          )}
+          {isPaid && (
+            <div style={{ background: "#d1fae5", border: "1px solid #6ee7b7", borderRadius: 9, padding: "12px 16px", display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#065f46", fontWeight: 600 }}>
+              <IC.Check /> Fee has been paid
+            </div>
+          )}
+          {isWaived && (
+            <div style={{ background: "#f3f4f6", border: "1px solid #e5e7eb", borderRadius: 9, padding: "12px 16px", display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#374151", fontWeight: 600 }}>
+              <IC.X /> Fee was waived
+            </div>
+          )}
+
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ═══════════════════════════════════════════════════════════════
+   FEES TAB  (full replacement)
+═══════════════════════════════════════════════════════════════ */
+const FeesTab = () => {
+  const [fees,      setFees]      = useState([]);
+  const [loading,   setLoading]   = useState(true);
+  const [filter,    setFilter]    = useState("all");
+  const [search,    setSearch]    = useState("");
+  const [actionId,  setAct]       = useState(null);
+  const [editId,    setEditId]    = useState(null);
+  const [editAmt,   setEditAmt]   = useState("");
+  const [showCreate,setShowCreate]= useState(false);
+  const [drawerFee, setDrawerFee] = useState(null);
+  const [sortBy,    setSort]      = useState("date_desc");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const q = filter !== "all" ? `?status=${filter}` : "";
+      const { data } = await API.get(`/admin/fees${q}`);
+      setFees(data.fees || []);
+    } catch {}
+    finally { setLoading(false); }
+  }, [filter]);
+
+  useEffect(() => { load(); }, [load]);
+
+  // ── Actions ──────────────────────────────────────────────────────────────
+  const markPaid = async (id) => {
+    setAct(id);
+    try { await API.patch(`/admin/fees/${id}/mark-paid`); load(); setDrawerFee(null); }
+    catch (e) { alert(e.response?.data?.message || "Failed"); }
+    finally { setAct(null); }
+  };
+
+  const waive = async (id) => {
+    if (!window.confirm("Waive this fee? This cannot be undone.")) return;
+    setAct(id);
+    try { await API.patch(`/admin/fees/${id}/waive`); load(); setDrawerFee(null); }
+    catch (e) { alert(e.response?.data?.message || "Failed"); }
+    finally { setAct(null); }
+  };
+
+  const updAmt = async (id) => {
+    setAct(id);
+    try { await API.patch(`/admin/fees/${id}`, { amount: Number(editAmt) }); setEditId(null); load(); }
+    catch (e) { alert(e.response?.data?.message || "Failed"); }
+    finally { setAct(null); }
+  };
+
+  // ── Derived stats ─────────────────────────────────────────────────────────
+  const allFees    = fees;
+  const collected  = allFees.filter(f => f.status === "paid").reduce((a, f) => a + (f.amount || 0), 0);
+  const outstanding= allFees.filter(f => f.status === "unpaid").reduce((a, f) => a + (f.amount || 0), 0);
+  const overdue    = allFees.filter(f => f.status === "unpaid" && new Date(f.dueDate) < new Date()).length;
+  const razorpayC  = allFees.filter(f => f.razorpayPaymentId && f.status === "paid").reduce((a, f) => a + (f.amount || 0), 0);
+
+  // ── Client-side search + sort ─────────────────────────────────────────────
+  const displayed = allFees
+    .filter(f => {
+      if (!search) return true;
+      const q = search.toLowerCase();
+      return (
+        f.sellerId?.name?.toLowerCase().includes(q) ||
+        f.sellerId?.email?.toLowerCase().includes(q) ||
+        f.propertyId?.title?.toLowerCase().includes(q) ||
+        f.razorpayPaymentId?.toLowerCase().includes(q)
+      );
+    })
+    .sort((a, b) => {
+      if (sortBy === "date_desc")   return new Date(b.createdAt) - new Date(a.createdAt);
+      if (sortBy === "date_asc")    return new Date(a.createdAt) - new Date(b.createdAt);
+      if (sortBy === "amount_desc") return (b.amount || 0) - (a.amount || 0);
+      if (sortBy === "amount_asc")  return (a.amount || 0) - (b.amount || 0);
+      return 0;
+    });
+
+  return (
     <div className="tab-body">
 
-      <div className="tab-head">
-
-        <h2 className="tab-title">
-
-          Agent Commissions
-
-        </h2>
-
-        <p className="tab-sub">
-
-          Manage all agent payouts
-          and commissions
-
-        </p>
-
+      {/* ── Header ── */}
+      <div className="tab-head-row">
+        <div>
+          <h2 className="tab-title">Seller Fees</h2>
+          <p className="tab-sub">Auto-collected via Razorpay · Manual fees for edge cases</p>
+        </div>
+        <button className="btn-create-agent" onClick={() => setShowCreate(true)}>
+          <IC.Plus /> Create Manual Fee
+        </button>
       </div>
 
-      {/* Stats */}
+      {/* ── Stats row ── */}
+      <div className="stats-grid" style={{ gridTemplateColumns: "repeat(4,1fr)" }}>
+        <StatCard icon={<IC.CreditCard />} accent="#16a34a" label="Collected"       value={fmtPrice(collected)}    sub="all time" />
+        <StatCard icon={<IC.Alert />}      accent="#dc2626" label="Outstanding"     value={fmtPrice(outstanding)}  sub={`${allFees.filter(f=>f.status==="unpaid").length} unpaid`} />
+        <StatCard icon={<IC.Clock />}      accent="#d97706" label="Overdue"         value={overdue}                sub="past due date" />
+        <StatCard icon={<IC.ShieldCheck />}accent="#7c3aed" label="Via Razorpay"    value={fmtPrice(razorpayC)}    sub="auto-verified" />
+      </div>
+
+      {/* ── Toolbar ── */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          {/* Status filter pills */}
+          <div className="filter-tabs">
+            {[
+              { key: "all",    label: "All" },
+              { key: "unpaid", label: "Unpaid" },
+              { key: "paid",   label: "Paid" },
+              { key: "waived", label: "Waived" },
+            ].map(f => (
+              <button key={f.key} className={`ftab${filter === f.key ? " on" : ""}`}
+                onClick={() => setFilter(f.key)}>
+                {f.label}
+                {f.key === "unpaid" && overdue > 0 && (
+                  <span style={{ background: "#fee2e2", color: "#dc2626", fontSize: 10, fontWeight: 700, padding: "1px 5px", borderRadius: 10, marginLeft: 5 }}>
+                    {overdue}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+          {/* Search */}
+          <div className="search-box" style={{ minWidth: 220 }}>
+            <IC.Search />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search seller, property, payment ID…"
+            />
+          </div>
+        </div>
+        {/* Sort */}
+        <select className="sel" value={sortBy} onChange={e => setSort(e.target.value)}>
+          <option value="date_desc">Newest first</option>
+          <option value="date_asc">Oldest first</option>
+          <option value="amount_desc">Highest amount</option>
+          <option value="amount_asc">Lowest amount</option>
+        </select>
+      </div>
+
+      {/* ── Table ── */}
+      <div className="card no-pad">
+        {loading
+          ? <div className="loading-state"><div className="spinner" /></div>
+          : displayed.length === 0
+          ? <div className="empty"><IC.Search /><span>No fees match your filters</span></div>
+          : (
+            <div className="table-scroll">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    {["Seller", "Property", "Type", "Amount", "Status", "Source", "Due Date", "Actions"].map(h =>
+                      <th key={h}>{h}</th>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {displayed.map(f => {
+                    const isOverdueFee = f.status === "unpaid" && f.dueDate && new Date(f.dueDate) < new Date();
+                    return (
+                      <tr key={f._id} style={{ cursor: "pointer" }} onClick={() => setDrawerFee(f)}>
+
+                        {/* Seller */}
+                        <td onClick={e => e.stopPropagation()}>
+                          <div className="user-cell">
+                            <Avatar name={f.sellerId?.name} size={26} />
+                            <div>
+                              <div className="cell-title">{f.sellerId?.name || "—"}</div>
+                              <div className="cell-sub">{f.sellerId?.email}</div>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Property */}
+                        <td>
+                          <div className="cell-title" style={{ maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {f.propertyId?.title || <span className="na-text">—</span>}
+                          </div>
+                          {f.propertyId?.address?.city && (
+                            <div className="cell-sub">{f.propertyId.address.city}</div>
+                          )}
+                        </td>
+
+                        {/* Type */}
+                        <td>
+                          <span style={{ fontSize: 12, color: "var(--t2)", fontWeight: 500 }}>
+                            {f.feeType || "Listing Fee"}
+                          </span>
+                        </td>
+
+                        {/* Amount — inline editable */}
+                        <td onClick={e => e.stopPropagation()}>
+                          {editId === f._id
+                            ? (
+                              <div className="edit-inline">
+                                <input
+                                  className="amount-input"
+                                  type="number"
+                                  value={editAmt}
+                                  onChange={e => setEditAmt(e.target.value)}
+                                  onClick={e => e.stopPropagation()}
+                                  autoFocus
+                                />
+                                <button className="btn-approve sm" onClick={() => updAmt(f._id)} disabled={actionId === f._id}><IC.Check /></button>
+                                <button className="btn-ghost sm" onClick={() => setEditId(null)}>✕</button>
+                              </div>
+                            ) : (
+                              <span
+                                className="price-cell"
+                                style={{ cursor: f.status === "unpaid" ? "pointer" : "default" }}
+                                title={f.status === "unpaid" ? "Click to edit amount" : ""}
+                                onClick={e => {
+                                  if (f.status !== "unpaid") return;
+                                  e.stopPropagation();
+                                  setEditId(f._id);
+                                  setEditAmt(f.amount);
+                                }}
+                              >
+                                {fmtPrice(f.amount)}
+                                {f.status === "unpaid" && <IC.Edit style={{ opacity: 0.3, verticalAlign: "middle", marginLeft: 4 }} />}
+                              </span>
+                            )
+                          }
+                        </td>
+
+                        {/* Status */}
+                        <td><FeePill status={f.status} /></td>
+
+                        {/* Source badge */}
+                        <td>
+                          {f.razorpayPaymentId
+                            ? <Pill bg="#d1fae5" color="#065f46">Razorpay</Pill>
+                            : <Pill bg="#f3f4f6" color="#374151">Manual</Pill>
+                          }
+                        </td>
+
+                        {/* Due date */}
+                        <td>
+                          <span className={isOverdueFee ? "overdue-text" : ""}>
+                            {fmtDate(f.dueDate)}
+                            {isOverdueFee && <span style={{ marginLeft: 4, fontSize: 10 }}>⚠</span>}
+                          </span>
+                        </td>
+
+                        {/* Actions */}
+                        <td onClick={e => e.stopPropagation()}>
+                          <div className="row-actions">
+                            {f.status === "unpaid" && (
+                              <>
+                                <button className="btn-approve sm" onClick={() => markPaid(f._id)} disabled={actionId === f._id}>
+                                  <IC.Check /> Paid
+                                </button>
+                                <button className="btn-ghost sm" onClick={() => waive(f._id)} disabled={actionId === f._id}>
+                                  Waive
+                                </button>
+                              </>
+                            )}
+                            {f.status === "paid"   && <span className="na-text">Settled</span>}
+                            {f.status === "waived" && <span className="na-text">Waived</span>}
+                          </div>
+                        </td>
+
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )
+        }
+
+        {/* Footer count */}
+        {!loading && displayed.length > 0 && (
+          <div style={{ padding: "10px 14px", borderTop: "1px solid var(--bdr)", fontSize: 12, color: "var(--t3)", display: "flex", justifyContent: "space-between" }}>
+            <span>{displayed.length} record{displayed.length !== 1 ? "s" : ""}</span>
+            <span>Click any row to view full details</span>
+          </div>
+        )}
+      </div>
+
+      {/* ── Modals / Drawers ── */}
+      {showCreate && (
+        <CreateFeeModal onClose={() => setShowCreate(false)} onSaved={load} />
+      )}
+      {drawerFee && (
+        <FeeDrawer
+          fee={drawerFee}
+          onClose={() => setDrawerFee(null)}
+          onMarkPaid={markPaid}
+          onWaive={waive}
+          loading={!!actionId}
+        />
+      )}
+
+    </div>
+  );
+};
+const CommissionsTab = () => {
+  const [commissions, setCommissions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [actionId, setAct] = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+
+    try {
+      const { data } = await API.get("/admin/commissions");
+
+      setCommissions(data.commissions || []);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const markPaid = async (id) => {
+    setAct(id);
+
+    try {
+      await API.patch(`/admin/commissions/${id}/pay`);
+
+      load();
+    } catch (e) {
+      alert(e.response?.data?.message || "Failed");
+    } finally {
+      setAct(null);
+    }
+  };
+
+  const totalPaid = commissions
+    .filter((c) => c.status === "paid")
+    .reduce((a, c) => a + (c.amount || 0), 0);
+
+  const totalPending = commissions
+    .filter((c) => c.status !== "paid")
+    .reduce((a, c) => a + (c.amount || 0), 0);
+
+  return (
+    <div className="tab-body">
+      <div className="tab-head">
+        <h2 className="tab-title">Agent Commissions</h2>
+
+        <p className="tab-sub">
+          Track and manage all agent commissions
+        </p>
+      </div>
+
       <div
         className="stats-grid"
-        style={{
-          gridTemplateColumns:
-            "repeat(3,1fr)",
-        }}
+        style={{ gridTemplateColumns: "repeat(3,1fr)" }}
       >
-
         <StatCard
           icon={<IC.CreditCard />}
           accent="#16a34a"
           label="Paid"
-          value={fmtPrice(
-            totalPaid
-          )}
+          value={fmtPrice(totalPaid)}
         />
 
         <StatCard
           icon={<IC.Alert />}
           accent="#dc2626"
           label="Pending"
-          value={fmtPrice(
-            totalPending
-          )}
+          value={fmtPrice(totalPending)}
         />
 
         <StatCard
           icon={<IC.TrendUp />}
-          accent="#2563eb"
-          label="Total Commissions"
-          value={rows.length}
+          accent="#7c3aed"
+          label="Total"
+          value={fmtPrice(totalPaid + totalPending)}
         />
-
       </div>
 
-      {/* Filters */}
-      <div className="filter-tabs">
-
-        {[
-          "all",
-          "pending",
-          "paid",
-        ].map((f) => (
-
-          <button
-            key={f}
-            className={`ftab ${
-              filter === f
-                ? "on"
-                : ""
-            }`}
-            onClick={() =>
-              setFilter(f)
-            }
-          >
-
-            {f}
-
-          </button>
-
-        ))}
-
-      </div>
-
-      {/* Table */}
       <div className="card no-pad">
-
         {loading ? (
-
           <div className="loading-state">
-
             <div className="spinner" />
-
           </div>
-
-        ) : rows.length === 0 ? (
-
+        ) : commissions.length === 0 ? (
           <div className="empty">
-
             No commissions found
-
           </div>
-
         ) : (
-
           <div className="table-scroll">
-
             <table className="data-table">
-
               <thead>
-
                 <tr>
-
                   <th>Agent</th>
-
-                  <th>Property</th>
-
                   <th>Seller</th>
-
+                  <th>Property</th>
                   <th>Amount</th>
-
                   <th>Status</th>
-
                   <th>Date</th>
-
                   <th>Actions</th>
-
                 </tr>
-
               </thead>
 
               <tbody>
-
-                {rows.map((r) => (
-
-                  <tr key={r._id}>
-
-                    {/* Agent */}
+                {commissions.map((c) => (
+                  <tr key={c._id}>
                     <td>
-
-                      <div className="user-cell">
-
-                        <Avatar
-                          name={
-                            r.agentId
-                              ?.name
-                          }
-                          size={30}
-                        />
-
-                        <div>
-
-                          <div className="cell-title">
-
-                            {
-                              r.agentId
-                                ?.name
-                            }
-
-                          </div>
-
-                          <div className="cell-sub">
-
-                            {
-                              r.agentId
-                                ?.email
-                            }
-
-                          </div>
-
-                        </div>
-
-                      </div>
-
-                    </td>
-
-                    {/* Property */}
-                    <td>
-
                       <div className="cell-title">
-
-                        {
-                          r.propertyId
-                            ?.title
-                        }
-
+                        {c.agentId?.name || "—"}
                       </div>
 
+                      <div className="cell-sub">
+                        {c.agentId?.email || ""}
+                      </div>
                     </td>
 
-                    {/* Seller */}
                     <td>
-
                       <div className="cell-title">
-
-                        {
-                          r.sellerId
-                            ?.name
-                        }
-
+                        {c.sellerId?.name || "—"}
                       </div>
 
+                      <div className="cell-sub">
+                        {c.sellerId?.email || ""}
+                      </div>
                     </td>
 
-                    {/* Amount */}
                     <td>
+                      <div className="cell-title">
+                        {c.propertyId?.title || "—"}
+                      </div>
 
+                      <div className="cell-sub">
+                        {c.propertyId?.address?.city || ""}
+                      </div>
+                    </td>
+
+                    <td>
                       <span className="price-cell">
-
-                        {fmtPrice(
-                          r.amount
-                        )}
-
+                        {fmtPrice(c.amount)}
                       </span>
-
                     </td>
 
-                    {/* Status */}
                     <td>
+                      <FeePill status={c.status} />
+                    </td>
 
-                      {r.status ===
-                      "paid" ? (
+                    <td>
+                      {fmtDate(c.createdAt)}
+                    </td>
 
+                    <td>
+                      {c.status !== "paid" ? (
+                        <button
+                          className="btn-approve sm"
+                          onClick={() => markPaid(c._id)}
+                          disabled={actionId === c._id}
+                        >
+                          <IC.Check />
+                          Mark Paid
+                        </button>
+                      ) : (
                         <Pill
                           bg="#d1fae5"
                           color="#065f46"
-                          dot="●"
                         >
-
                           Paid
-
                         </Pill>
-
-                      ) : (
-
-                        <Pill
-                          bg="#fee2e2"
-                          color="#991b1b"
-                          dot="●"
-                        >
-
-                          Pending
-
-                        </Pill>
-
                       )}
-
                     </td>
-
-                    {/* Date */}
-                    <td>
-
-                      {fmtDate(
-                        r.createdAt
-                      )}
-
-                    </td>
-
-                    {/* Actions */}
-                    <td>
-
-                      {r.status !==
-                        "paid" && (
-
-                        <button
-                          className="btn-approve sm"
-                          onClick={() =>
-                            markPaid(
-                              r._id
-                            )
-                          }
-                          disabled={
-                            actionId ===
-                            r._id
-                          }
-                        >
-
-                          <IC.Check />
-
-                          Mark Paid
-
-                        </button>
-
-                      )}
-
-                    </td>
-
                   </tr>
-
                 ))}
-
               </tbody>
-
             </table>
-
           </div>
-
         )}
-
       </div>
-
     </div>
   );
 };
@@ -1341,7 +1709,7 @@ export default function AdminDashboard() {
         <div className="topbar">
           <div>
             <h1 className="topbar-title">Admin Dashboard</h1>
-            <p className="topbar-sub">Full control over NestFind · Logged in as <strong>{user?.name}</strong></p>
+            <p className="topbar-sub">Full control over Crestovia · Logged in as <strong>{user?.name}</strong></p>
           </div>
           {(awaitingAgent > 0 || readyForAdmin > 0 || stats?.fees?.unpaid > 0) && (
             <div className="topbar-alerts">
@@ -1362,6 +1730,9 @@ export default function AdminDashboard() {
         {tab==="users"      &&<UsersTab/>}
         {tab==="agents"     &&<AgentsTab/>}
         {tab==="fees"       &&<FeesTab/>}
+        {tab === "commissions" && (
+  <CommissionsTab />
+)}
       </main>
 
       <style>{`

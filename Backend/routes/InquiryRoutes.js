@@ -7,7 +7,8 @@ const {
 const ctrl = require("../controllers/inquiryController");
 const sellerCtrl = require("../controllers/inquirymeetingController");
 // Public — buyer submits inquiry
-router.post("/", ctrl.createInquiry);
+router.post("/", authMiddleware, roleGuard("buyer"), ctrl.createInquiry);
+
 
 // Agent routes
 router.get(  "/my",          authMiddleware, roleGuard("agent"),  ctrl.getMyInquiries);

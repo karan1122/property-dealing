@@ -293,7 +293,7 @@ function MeetingsPanel() {
               {/* Actions */}
               {m.status === "pending" && (
                 <div style={{ display:"flex", flexDirection:"column", gap:6, minWidth:110 }}>
-                  <button
+                  {/* <button
                     disabled={!!updating}
                     onClick={() => updateStatus(m._id, "confirmed")}
                     style={{ display:"flex",alignItems:"center",justifyContent:"center",gap:5,padding:"7px 12px",background:"#dcfce7",color:"#15803d",border:"1px solid #86efac",borderRadius:8,fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"inherit",transition:"background .12s" }}
@@ -306,7 +306,18 @@ function MeetingsPanel() {
                     style={{ display:"flex",alignItems:"center",justifyContent:"center",gap:5,padding:"7px 12px",background:"#fee2e2",color:"#dc2626",border:"1px solid #fca5a5",borderRadius:8,fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"inherit",transition:"background .12s" }}
                   >
                     {updating===m._id+"cancelled" ? "…" : <><IC.XCircle /> Decline</>}
-                  </button>
+                  </button> */}
+                  // Remove the confirm/decline buttons for seller
+// Keep only "Mark Done" for confirmed meetings
+{m.status === "confirmed" && (
+  <button onClick={() => updateStatus(m._id, "completed")}
+    style={{ padding:"7px 12px",background:"#eff6ff",color:"#2563eb",border:"1px solid #93c5fd",borderRadius:8,fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"inherit",alignSelf:"flex-start" }}>
+    {updating===m._id+"completed" ? "…" : "Mark Done"}
+  </button>
+)}
+{m.status !== "confirmed" && m.status !== "completed" && (
+  <span style={{ fontSize:11.5,color:"#94a3b8",alignSelf:"flex-start" }}>Awaiting agent</span>
+)}
                 </div>
               )}
               {m.status === "confirmed" && (
@@ -411,7 +422,7 @@ export default function SellerDashboard() {
       <aside className="sd-sidebar">
         <div className="sd-logo">
           <div className="sd-logo-mark"><IC.Home /></div>
-          <span>NestFind</span>
+          <span>Crestovia</span>
         </div>
         <div className="sd-user">
           <div className="sd-avatar">{user?.name?.charAt(0).toUpperCase()}</div>

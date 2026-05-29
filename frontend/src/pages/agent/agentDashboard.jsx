@@ -561,6 +561,8 @@ export default function AgentDashboard() {
   const [modal, setModal] = useState(null); // { property, action }
   const [inquiries, setInquiries] = useState([]);
   const [commissions, setCommissions] = useState([]);
+  const [meetings, setMeetings] = useState([]);
+
 
   const stats = {
     sellers: sellers.length,
@@ -627,6 +629,7 @@ const fetchData = useCallback(
       const agentId =
         meRes.data.user._id;
 
+        const meetingRes = await api.get("/meetings/agent/my");
       const [
         sellerRes,
         propRes,
@@ -656,7 +659,7 @@ const fetchData = useCallback(
         sellerRes.data
           .sellers || []
       );
-
+      setMeetings(meetingRes.data.meetings || []);
       setProperties(
         propRes.data
           .properties || []
@@ -727,7 +730,9 @@ const handleInquiryStatus = async (id, status, agentNote) => {
     { id: "overview", label: "Overview", Icon: IC.Home },
     { id: "properties", label: "Properties", Icon: IC.Building },
     { id: "crm", label: "CRM", Icon: IC.Users },
+    { id: "meetings", label: "Meetings", Icon: IC.Clock },
     { id: "sellers", label: "Sellers", Icon: IC.Users },
+
   ];
 
   return (
@@ -738,7 +743,7 @@ const handleInquiryStatus = async (id, status, agentNote) => {
         <div className="ag-sb-logo">
           <div className="ag-sb-logo-icon"><IC.Shield /></div>
           <div>
-            <div className="ag-sb-logo-name">NestFind</div>
+            <div className="ag-sb-logo-name">Crestovia</div>
             <div className="ag-sb-logo-sub">Agent Portal</div>
           </div>
         </div>
@@ -953,6 +958,67 @@ const handleInquiryStatus = async (id, status, agentNote) => {
                 </div>
               </div>
             )}
+            {tab === "meetings" && (
+  <div className="ag-tab-body">
+    <div className="ag-card">
+      <div className="ag-card-head">
+        <h2 className="ag-card-title">📅 Meeting Requests</h2>
+        <span style={{ fontSize:12,color:"#94a3b8" }}>{meetings.filter(m=>m.status==="pending").length} pending</span>
+      </div>
+      {meetings.length === 0 ? (
+        <div className="ag-empty"><IC.Clock /><span>No meeting requests yet</span></div>
+      ) : (
+        <div style={{ display:"flex", flexDirection:"column" }}>
+          {meetings.map(m => (
+            <div key={m._id} style={{ padding:"16px 18px", borderBottom:"1px solid #f1f5f9", display:"grid", gridTemplateColumns:"auto 1fr auto", gap:14, alignItems:"flex-start" }}>
+              {/* Date block */}
+              <div style={{ width:52,textAlign:"center",background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:10,padding:"8px 4px",flexShrink:0 }}>
+                <div style={{ fontSize:18,fontWeight:800,color:"#0f172a",lineHeight:1 }}>{new Date(m.scheduledAt).getDate()}</div>
+                <div style={{ fontSize:10,fontWeight:600,color:"#64748b",textTransform:"uppercase",marginTop:2 }}>{new Date(m.scheduledAt).toLocaleString("en-IN",{month:"short"})}</div>
+                <div style={{ fontSize:10,color:"#94a3b8",marginTop:2 }}>{new Date(m.scheduledAt).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"})}</div>
+              </div>
+              {/* Info */}
+              <div>
+                <div style={{ fontWeight:700,fontSize:14,color:"#0f172a" }}>{m.name}</div>
+                <div style={{ fontSize:12,color:"#64748b",marginTop:2 }}>{m.propertyId?.title} · Seller: {m.sellerId?.name}</div>
+                <div style={{ display:"flex",gap:10,marginTop:5,flexWrap:"wrap" }}>
+                  <a href={`tel:${m.phone}`} style={{ fontSize:12,color:"#059669",textDecoration:"none",fontWeight:500 }}>📞 {m.phone}</a>
+                  {m.email && <a href={`mailto:${m.email}`} style={{ fontSize:12,color:"#2563eb",textDecoration:"none",fontWeight:500 }}>✉ {m.email}</a>}
+                </div>
+                {m.note && <div style={{ marginTop:6,background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:7,padding:"6px 10px",fontSize:12.5,color:"#334155" }}>{m.note}</div>}
+                <div style={{ marginTop:4,fontSize:11,color:"#94a3b8" }}>
+                  Address: {m.propertyId?.address?.street}, {m.propertyId?.address?.city}
+                </div>
+              </div>
+              {/* Actions */}
+              {m.status === "pending" && (
+                <div style={{ display:"flex",flexDirection:"column",gap:6,minWidth:110 }}>
+                  <button onClick={async()=>{
+                    await api.patch(`/meetings/agent/${m._id}/status`,{status:"confirmed"});
+                    fetchData(true);
+                  }} style={{ padding:"7px 12px",background:"#dcfce7",color:"#15803d",border:"1px solid #86efac",borderRadius:8,fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"inherit" }}>
+                    ✓ Confirm
+                  </button>
+                  <button onClick={async()=>{
+                    await api.patch(`/meetings/agent/${m._id}/status`,{status:"cancelled"});
+                    fetchData(true);
+                  }} style={{ padding:"7px 12px",background:"#fee2e2",color:"#dc2626",border:"1px solid #fca5a5",borderRadius:8,fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"inherit" }}>
+                    ✗ Cancel
+                  </button>
+                </div>
+              )}
+              {m.status !== "pending" && (
+                <span style={{ fontSize:11.5,fontWeight:700,padding:"4px 10px",borderRadius:20,background:m.status==="confirmed"?"#dcfce7":"#fee2e2",color:m.status==="confirmed"?"#15803d":"#dc2626",alignSelf:"flex-start" }}>
+                  {m.status.charAt(0).toUpperCase()+m.status.slice(1)}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  </div>
+)}
           </>
         )}
       </main>

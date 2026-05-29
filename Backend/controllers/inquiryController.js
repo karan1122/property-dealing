@@ -1,7 +1,7 @@
 const Inquiry    = require("../models/Inquiry");
 const Property   = require("../models/Property");
 const User       = require("../models/User");
-const Commission = require("../models/commisiion");
+const Commission = require("../models/commission");
 
 // POST /api/inquiries — buyer submits (public)
 exports.createInquiry = async (req, res) => {

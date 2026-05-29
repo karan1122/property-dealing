@@ -9,6 +9,8 @@ const ctrl = require("../controllers/adminController");
 // All admin routes require login + admin role
 const adminOnly = [authMiddleware, roleGuard("admin")];
 
+const meeting = require("../controllers/inquiryController");
+
 // ── Dashboard stats ───────────────────────────────────────────────────────────
 router.get("/stats", ...adminOnly, ctrl.getStats);
 
@@ -44,4 +46,8 @@ router.patch  ("/agents/:agentId/unassign-seller",    agent.unassignSeller);
 router.get    ("/agents/:id/sellers",                 agent.getAgentSellers);
 router.get    ("/agents/:id/properties",              agent.getAgentProperties);
 router.get("/seller/my-agent", authMiddleware, agent.getMyAgent);
+
+
+router.get("/commissions", ...adminOnly, meeting.getAllCommissions);
+router.patch("/commissions/:id/pay", ...adminOnly, meeting.markCommissionPaid);
 module.exports = router;

@@ -114,23 +114,21 @@ exports.deleteUser = async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 exports.getAllProperties = async (req, res) => {
   try {
-    const { status, approved, search, page = 1, limit = 20 } = req.query;
+    const { approved, agentVerdict, page = 1, limit = 20 } = req.query;
     const filter = {};
-    if (status)   filter.status = status;
     if (approved !== undefined) filter.isApprovedByCompany = approved === "true";
-    if (search)   filter.title = { $regex: search, $options: "i" };
+    if (agentVerdict) filter.agentVerificationStatus = agentVerdict;  // ← add this
 
     const skip = (Number(page) - 1) * Number(limit);
     const [properties, total] = await Promise.all([
       Property.find(filter)
         .populate("userId", "name email contact role")
-.populate("verifiedByAgent", "name email")
+        .populate("verifiedByAgent", "name email")
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(Number(limit)),
       Property.countDocuments(filter),
     ]);
-
     res.json({ properties, total, page: Number(page), pages: Math.ceil(total / Number(limit)) });
   } catch (err) {
     res.status(500).json({ message: err.message });

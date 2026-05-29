@@ -8,8 +8,9 @@ const authRoutes = require("./routes/authRoutes");
 const listingRoutes = require("./routes/listingRoutes");
 const propertyRoutes = require("./routes/propertyRoutes");
 const adminRoutes = require("./routes/adminRoutes");
-
+const paymentRoutes = require("./routes/paymentRoutes");
 const path = require("path");
+const helmet = require('helmet');
 
 const app = express();
 
@@ -21,14 +22,21 @@ app.use(cors({
   origin: process.env.CLIENT_URL || "http://localhost:5173",
   credentials: true,           // ← required for httpOnly cookie to be sent
 }));
-
+// app.use(
+//   "/api/payments/webhook",
+//   express.raw({ type: "application/json" }),
+//   require("./routes/paymentRoutes")
+// );
 // ── Body parsers ──────────────────────────────────────────────────────────────
 app.use(express.json({ limit: "10kb" }));
 app.use(express.urlencoded({ extended: true }));
 
+app.use(helmet());
 // ── Cookie parser (reads req.cookies.refreshToken) ────────────────────────────
 app.use(cookieParser());
-
+//--payment routes--
+app.use("/api/payments", paymentRoutes);
+app.use("/api/admin/fees", require("./routes/feeRoutes"));
 // ── Routes ────────────────────────────────────────────────────────────────────
 app.use("/api/auth",     authRoutes);
 app.use("/api/listings", listingRoutes);

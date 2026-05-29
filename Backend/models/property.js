@@ -163,6 +163,10 @@ const propertySchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
     },
+        listingFeePaid:      { type: Boolean, default: false },
+  stripeSessionId:     { type: String,  default: "" },
+  stripePaymentIntent: { type: String,  default: "" }
+
   },
 
   {

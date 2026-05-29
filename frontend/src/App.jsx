@@ -32,6 +32,9 @@ import SellerDashboard  from "./pages/seller/SellerDashboard";
 import AddProperty      from "./pages/seller/AddProperty";
 import EditProperty     from "./pages/seller/EditProperty";
 import SellerInquiries  from "./pages/seller/SellerInquiries";
+import PaymentSuccess from "./pages/seller/paymentSuccess";
+
+
 
 /* ── Route guards ─────────────────────────────────────────────────────────── */
 import ProtectedRoute from "./routes/ProtectedRoute";
@@ -103,6 +106,7 @@ const App = () => {
           <Route path="/seller/add-property"      element={<AddProperty />} />
           <Route path="/seller/edit-property/:id" element={<EditProperty />} />
           <Route path="/seller/inquiries"         element={<SellerInquiries />} />
+          <Route path="/payment/success" element={<PaymentSuccess />} />
         </Route>
       </Route>
 

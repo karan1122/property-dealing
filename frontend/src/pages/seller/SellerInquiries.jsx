@@ -30,7 +30,7 @@ export default function SellerInquiries() {
   return (
     <div className="page-layout">
       <aside className="sidebar">
-        <div className="sidebar-logo">&#8962; NestFind</div>
+        <div className="sidebar-logo">&#8962; Crestovia</div>
         <nav className="sidebar-nav">
           <Link to="/seller/dashboard" className="nav-item">&#9783; Overview</Link>
           <Link to="/seller/properties" className="nav-item">&#127968; My Properties</Link>

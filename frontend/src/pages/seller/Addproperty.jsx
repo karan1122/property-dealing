@@ -90,78 +90,24 @@ export default function AddProperty() {
     setImgPreviews((p) => p.filter((_, idx) => idx !== i));
   };
 
-const getCoordinates = async () => {
-
-  try {
-
-const fullAddress = `${form.address.street}, ${form.address.city}, ${form.address.state}, ${form.address.pincode}, ${form.address.country}`;
-
-
-    console.log(
-      "Searching Address:",
-      fullAddress
-    );
-
-    const url =
-`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(fullAddress)}&format=jsonv2&limit=1`;
-    console.log("API URL:", url);
-
-   const res = await fetch(url, {
-  headers: {
-    Accept: "application/json",
-    "User-Agent": "NestFind/1.0",
-  },
-});
-
-    console.log(
-      "Response Status:",
-      res.status
-    );
-
-    const data = await res.json();
-
-    console.log(
-      "Coordinates API Response:",
-      data
-    );
-
-    if (data.length > 0) {
-
-      const coords = {
-        latitude: parseFloat(data[0].lat),
-        longitude: parseFloat(data[0].lon),
-      };
-
-      console.log(
-        "Final Coordinates:",
-        coords
-      );
-
-      return coords;
+  const getCoordinates = async () => {
+    try {
+      const fullAddress = `${form.address.street}, ${form.address.city}, ${form.address.state}, ${form.address.pincode}, ${form.address.country}`;
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(fullAddress)}&format=jsonv2&limit=1`;
+      const res = await fetch(url, {
+        headers: { Accept: "application/json", "User-Agent": "Crestovia/1.0" },
+      });
+      const data = await res.json();
+      if (data.length > 0) {
+        return { latitude: parseFloat(data[0].lat), longitude: parseFloat(data[0].lon) };
+      }
+      return { latitude: null, longitude: null };
+    } catch (err) {
+      console.error("Coordinate Fetch Error:", err);
+      return { latitude: null, longitude: null };
     }
+  };
 
-    console.log(
-      "No coordinates found"
-    );
-
-    return {
-      latitude: null,
-      longitude: null,
-    };
-
-  } catch (err) {
-
-    console.error(
-      "Coordinate Fetch Error:",
-      err
-    );
-
-    return {
-      latitude: null,
-      longitude: null,
-    };
-  }
-};
   const validate = () => {
     const e = {};
     if (!form.title.trim()) e.title = "Title is required";
@@ -176,76 +122,121 @@ const fullAddress = `${form.address.street}, ${form.address.city}, ${form.addres
     return Object.keys(e).length === 0;
   };
 
- const handleSubmit = async (e) => {
+  // ─── Razorpay payment flow ───────────────────────────────────────────────
+  // Step A  → POST /payments/create-order  (multipart: draft data + images)
+  //           Backend saves PropertyDraft, creates Razorpay order
+  //           Returns { orderId, amount, currency, keyId, draftId }
+  //
+  // Step B  → Razorpay popup opens in browser (no page redirect)
+  //           Seller pays → Razorpay calls handler.onSuccess
+  //
+  // Step C  → POST /payments/verify  { razorpay_order_id, razorpay_payment_id,
+  //                                    razorpay_signature, draftId }
+  //           Backend verifies HMAC signature, promotes draft → Property
+  //           (status = Pending), returns { propertyId }
+  //
+  // Step D  → navigate to dashboard
+  // ─────────────────────────────────────────────────────────────────────────
 
-  e.preventDefault();
+  const loadRazorpayScript = () =>
+    new Promise((resolve) => {
+      if (window.Razorpay) return resolve(true);
+      const script = document.createElement("script");
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
 
-  if (!validate()) {
-    setStep(1);
-    return;
-  }
+  const handleSubmit = async (e) => {
+    e.preventDefault();
 
-  setLoading(true);
-
-  try {
-
-    // auto coordinates
-    const coords =
-      await getCoordinates();
-
-    const updatedForm = {
-      ...form,
-
-      address: {
-        ...form.address,
-
-        coordinates: coords,
-      },
-    };
-
-    const fd = new FormData();
-
-    fd.append(
-      "data",
-      JSON.stringify(updatedForm)
-    );
-
-    if (thumbnail) {
-      fd.append(
-        "thumbnail",
-        thumbnail
-      );
+    if (!validate()) {
+      setStep(1);
+      return;
     }
 
-    images.forEach((img) =>
-      fd.append("images", img)
-    );
+    setLoading(true);
 
-    await api.post(
-      "/properties",
-      fd,
-      {
-        headers: {
-          "Content-Type":
-            "multipart/form-data"
-        }
+    try {
+      // 1. Load Razorpay SDK
+      const sdkReady = await loadRazorpayScript();
+      if (!sdkReady) throw new Error("Failed to load Razorpay SDK. Check your internet connection.");
+
+      // 2. Resolve coordinates
+      const coords = await getCoordinates();
+      const updatedForm = {
+        ...form,
+        address: { ...form.address, coordinates: coords },
+      };
+
+      // 3. Upload draft + images, get Razorpay order details from backend
+      const fd = new FormData();
+      fd.append("data", JSON.stringify(updatedForm));
+      if (thumbnail) fd.append("thumbnail", thumbnail);
+      images.forEach((img) => fd.append("images", img));
+
+      const { data: order } = await api.post("/payments/create-order", fd, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      // order = { orderId, amount, currency, keyId, draftId }
+
+      // 4. Open Razorpay checkout popup
+      await new Promise((resolve, reject) => {
+        const options = {
+          key: order.keyId,                  // RAZORPAY_KEY_ID from backend
+          amount: order.amount,              // paise  e.g. 99900 for ₹999
+          currency: order.currency || "INR",
+          name: "Crestovia",
+          description: "Property Listing Fee",
+          order_id: order.orderId,           // Razorpay order id
+
+          handler: async (response) => {
+            // response = { razorpay_order_id, razorpay_payment_id, razorpay_signature }
+            try {
+              // 5. Verify payment + promote draft → Property on backend
+              await api.post("/payments/verify", {
+                razorpay_order_id:   response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature:  response.razorpay_signature,
+                draftId:             order.draftId,
+              });
+              resolve();
+            } catch (err) {
+              reject(err);
+            }
+          },
+
+          prefill: {},                       // backend can inject seller name/email if needed
+          theme: { color: "#C8973A" },
+
+          modal: {
+            ondismiss: () => reject(new Error("Payment cancelled")),
+          },
+        };
+
+        const rzp = new window.Razorpay(options);
+        rzp.on("payment.failed", (resp) =>
+          reject(new Error(resp.error?.description || "Payment failed"))
+        );
+        rzp.open();
+      });
+
+      // 6. Payment verified → go to dashboard
+navigate("/payment/success");
+
+    } catch (err) {
+      if (err.message === "Payment cancelled") {
+        // user closed popup — stay on page, no alert
+        setLoading(false);
+        return;
       }
-    );
-
-    navigate("/seller/dashboard");
-
-  } catch (err) {
-
-    alert(
-      err?.response?.data?.message ||
-      "Failed to add property"
-    );
-
-  } finally {
-
-    setLoading(false);
-  }
-};
+      alert(err?.response?.data?.message || err.message || "Payment failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+  // ─────────────────────────────────────────────────────────────────────────
 
   const stepOk = () => {
     if (step === 1) return form.title && form.description && form.price;
@@ -356,7 +347,7 @@ const fullAddress = `${form.address.street}, ${form.address.city}, ${form.addres
         <main className="ap-main">
           <div className="ap-crumb"><Link to="/seller/dashboard">Dashboard</Link> › Add Property</div>
           <h1 className="ap-ptitle">List a new property</h1>
-          <p className="ap-psub">Complete all 4 steps. Listing goes live after admin approval.</p>
+          <p className="ap-psub">Complete all 4 steps. Your listing goes live after payment and admin approval.</p>
 
           <div className="ap-steps">
             {STEPS.map((s, i) => (
@@ -425,16 +416,6 @@ const fullAddress = `${form.address.street}, ${form.address.city}, ${form.addres
                         onChange={(e)=>set("address.country",e.target.value)} />
                     </Field>
                   </div>
-                  <Field label="Map coordinates" hint="Optional — helps buyers see exact location">
-                    <div className="ap-g2">
-                      <input type="number" step="any" value={form.address.coordinates.latitude}
-                        onChange={(e)=>set("address.coordinates.latitude",e.target.value)}
-                        placeholder="Latitude  e.g. 21.1702" />
-                      <input type="number" step="any" value={form.address.coordinates.longitude}
-                        onChange={(e)=>set("address.coordinates.longitude",e.target.value)}
-                        placeholder="Longitude  e.g. 72.8311" />
-                    </div>
-                  </Field>
                 </div>
               )}
 
@@ -531,6 +512,18 @@ const fullAddress = `${form.address.street}, ${form.address.city}, ${form.addres
                       </div>
                     )}
                   </Field>
+
+                  {/* Payment notice */}
+                  <div style={{background:"#FFF9F0",border:"1.5px solid #E8C87A",borderRadius:"10px",padding:"14px 16px",display:"flex",alignItems:"flex-start",gap:"10px"}}>
+                    <span style={{fontSize:"18px",lineHeight:1}}>💳</span>
+                    <div>
+                      <p style={{fontSize:"13px",fontWeight:600,color:"#7A5C1E",margin:"0 0 3px"}}>One-time listing fee: ₹999</p>
+                      <p style={{fontSize:"12px",color:"#9A7A3A",margin:0}}>
+                        Clicking "Submit &amp; Pay" saves your listing and opens Razorpay Checkout.
+                        Your property will appear in your dashboard once payment is confirmed.
+                      </p>
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -539,7 +532,11 @@ const fullAddress = `${form.address.street}, ${form.address.city}, ${form.addres
                 <div className="ap-foot-btns">
                   {step > 1 && <button type="button" className="ap-btn-back" onClick={()=>setStep(step-1)}>← Back</button>}
                   {step < 4 && <button type="button" className="ap-btn-next" onClick={()=>setStep(step+1)} disabled={!stepOk()}>Next →</button>}
-                  {step === 4 && <button type="submit" className="ap-btn-sub" disabled={loading}>{loading?"Submitting...":"Submit listing"}</button>}
+                  {step === 4 && (
+                    <button type="submit" className="ap-btn-sub" disabled={loading}>
+                      {loading ? "Opening payment…" : "Submit & Pay ₹999"}
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

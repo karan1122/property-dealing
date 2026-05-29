@@ -103,7 +103,7 @@ const getCoordinates = async () => {
     const fullAddress = `${form.address?.street}, ${form.address?.city}, ${form.address?.state}, ${form.address?.pincode}, ${form.address?.country}`;
     const res = await fetch(
       `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(fullAddress)}&format=jsonv2&limit=1`,
-      { headers: { Accept: "application/json", "User-Agent": "NestFind/1.0" } }
+      { headers: { Accept: "application/json", "User-Agent": "Crestovia/1.0" } }
     );
     const data = await res.json();
     if (data.length > 0) return { latitude: parseFloat(data[0].lat), longitude: parseFloat(data[0].lon) };
@@ -286,7 +286,7 @@ const getCoordinates = async () => {
         {/* Sidebar */}
         <aside className="ep-sb">
           <div className="ep-brand">
-            🏡 NestFind
+            🏡 Crestovia
             <small>SELLER PORTAL</small>
           </div>
           <nav className="ep-nav">
